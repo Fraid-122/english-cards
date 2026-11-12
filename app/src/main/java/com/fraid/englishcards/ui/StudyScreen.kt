@@ -25,15 +25,12 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material3.Button
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -70,13 +67,11 @@ import kotlin.math.roundToInt
 @Composable
 fun StudyScreen(
     queue: List<Card>,
-    session: Int,
-    index: Int,
-    knownCount: Int,
-    missed: List<Card>,
+    step: Int,
+    total: Int,
+    done: Int,
     onAnswer: (Card, Boolean) -> Unit,
     onSpeak: (String) -> Unit,
-    onRepeatMissed: () -> Unit,
     onExit: () -> Unit,
 ) {
     // Whether the typing field is open; remembered from card to card.
@@ -93,27 +88,22 @@ fun StudyScreen(
                 .imePadding()
                 .padding(16.dp),
         ) {
-            val card = queue.getOrNull(index)
-            if (card == null) {
-                StudySummary(
-                    knownCount = knownCount,
-                    missedCount = missed.size,
-                    onRepeatMissed = onRepeatMissed,
-                    onExit = onExit,
-                )
-            } else {
+            // When the queue is empty the session is over and the app returns home.
+            val card = queue.firstOrNull()
+            if (card != null) {
                 Text(
-                    text = "Картка ${index + 1} з ${queue.size}",
+                    text = "Вивчено $done з $total · у черзі ${queue.size}",
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(6.dp))
                 LinearProgressIndicator(
-                    progress = { index.toFloat() / queue.size.toFloat() },
+                    progress = { if (total > 0) done.toFloat() / total.toFloat() else 0f },
                     modifier = Modifier.fillMaxWidth(),
                 )
-                // A fresh state (position, typed text) for every card of every session.
-                key(session, card.id) {
+                // A fresh state (position, typed text) every time a card comes up,
+                // also when the same card returns after a wrong answer.
+                key(step) {
                     StudyCard(
                         card = card,
                         typing = typing,
@@ -279,7 +269,9 @@ private fun StudyCard(
         }
 
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally),
         ) {
             FilledTonalIconButton(onClick = onToggleTyping, modifier = Modifier.size(52.dp)) {
@@ -319,71 +311,5 @@ private fun StudyCard(
             ),
             modifier = Modifier.fillMaxWidth(),
         )
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Button(
-                onClick = { fling(right = false) },
-                colors = ButtonDefaults.buttonColors(containerColor = UnknownRed, contentColor = AccentForeground),
-                modifier = Modifier
-                    .weight(1f)
-                    .height(52.dp),
-            ) { Text("Не знаю") }
-            Button(
-                onClick = { fling(right = true) },
-                colors = ButtonDefaults.buttonColors(containerColor = KnownGreen, contentColor = AccentForeground),
-                modifier = Modifier
-                    .weight(1f)
-                    .height(52.dp),
-            ) { Text("Знаю") }
-        }
-    }
-}
-
-@Composable
-private fun StudySummary(
-    knownCount: Int,
-    missedCount: Int,
-    onRepeatMissed: () -> Unit,
-    onExit: () -> Unit,
-) {
-    Column(
-        modifier = Modifier.fillMaxSize(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(14.dp, Alignment.CenterVertically),
-    ) {
-        Text(
-            text = "Сесію завершено",
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
-        )
-        Text(
-            text = "Знаю: $knownCount",
-            style = MaterialTheme.typography.titleLarge,
-            color = KnownGreen,
-        )
-        Text(
-            text = "Не знаю: $missedCount",
-            style = MaterialTheme.typography.titleLarge,
-            color = UnknownRed,
-        )
-        if (missedCount > 0) {
-            Button(
-                onClick = onRepeatMissed,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(54.dp),
-            ) { Text("Повторити ті, що не знаю") }
-        }
-        OutlinedButton(
-            onClick = onExit,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(54.dp),
-        ) { Text("На головну") }
     }
 }

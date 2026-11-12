@@ -20,7 +20,11 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -28,6 +32,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.fraid.englishcards.data.Card
 import com.fraid.englishcards.data.Scheduler
+import kotlinx.coroutines.delay
 
 @Composable
 fun HomeScreen(
@@ -35,10 +40,19 @@ fun HomeScreen(
     onStudy: () -> Unit,
     onAdd: () -> Unit,
 ) {
-    val now = remember(cards) { System.currentTimeMillis() }
+    // The clock ticks so cards on minute-long pauses come back without reopening the app.
+    var now by remember(cards) { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(cards) {
+        while (true) {
+            delay(10_000)
+            now = System.currentTimeMillis()
+        }
+    }
     val due = cards.count { Scheduler.isDue(it, now) }
     val inProgress = cards.count { Scheduler.isInProgress(it, now) }
-    val learned = cards.count { it.known }
+    val learned = cards.count { Scheduler.isLearned(it, now) }
+    val nextDueAt = cards.filter { !Scheduler.isDue(it, now) && it.dueAt != Long.MAX_VALUE }
+        .minOfOrNull { it.dueAt }
 
     Column(
         modifier = Modifier
@@ -86,7 +100,8 @@ fun HomeScreen(
             Text(
                 text = when {
                     cards.isEmpty() -> "Додай першу картку, щоб почати."
-                    inProgress > 0 -> "На сьогодні все повторено. Картки «У процесі» повернуться пізніше."
+                    nextDueAt != null ->
+                        "Зараз усе повторено. Наступна картка повернеться через ${Scheduler.formatWait(nextDueAt - now)}."
                     else -> "Усі картки вивчено. Додай нові!"
                 },
                 style = MaterialTheme.typography.bodyMedium,

@@ -53,22 +53,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var stack by mutableStateOf(listOf<Screen>(Screen.Home))
         private set
 
-    /** Cards of the current study session, fixed when the session starts. */
+    /** Cards still to answer in this study session; the first one is on screen. */
     var studyQueue by mutableStateOf(listOf<Card>())
         private set
 
-    /** Changes with every new session so the study screen starts fresh. */
-    var studySession by mutableStateOf(0)
+    /** Grows with every answer so the study screen starts each card fresh. */
+    var studyStep by mutableStateOf(0)
         private set
 
-    var studyIndex by mutableStateOf(0)
+    /** How many different cards the session started with. */
+    var studyTotal by mutableStateOf(0)
         private set
 
-    var studyKnownCount by mutableStateOf(0)
-        private set
-
-    /** Cards swiped left in the current session. */
-    var studyMissed by mutableStateOf(listOf<Card>())
+    /** How many of them have been answered right. */
+    var studyDone by mutableStateOf(0)
         private set
 
     private var tts: TextToSpeech? = null
@@ -165,21 +163,27 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         startStudyWith(queue)
     }
 
-    fun startStudyWith(queue: List<Card>) {
+    private fun startStudyWith(queue: List<Card>) {
         if (queue.isEmpty()) return
         studyQueue = queue
-        studySession += 1
-        studyIndex = 0
-        studyKnownCount = 0
-        studyMissed = emptyList()
+        studyStep += 1
+        studyTotal = queue.size
+        studyDone = 0
         if (stack.last() != Screen.Study) navigate(Screen.Study)
     }
 
-    /** Records the answer: swiped right (known) or left (not known). */
+    /**
+     * Records the answer. A card swiped left goes to the end of the queue and
+     * is asked again; the session ends when every card has been answered right.
+     */
     fun answer(card: Card, known: Boolean) {
         val latest = cards.value.firstOrNull { it.id == card.id } ?: card
         save(Scheduler.afterAnswer(latest, known, System.currentTimeMillis()))
-        if (known) studyKnownCount += 1 else studyMissed = studyMissed + card
-        studyIndex += 1
+
+        val rest = studyQueue.filterNot { it.id == card.id }
+        studyQueue = if (known) rest else rest + card
+        if (known) studyDone += 1
+        studyStep += 1
+        if (studyQueue.isEmpty()) goHome()
     }
 }

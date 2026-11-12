@@ -24,8 +24,12 @@ data class Card(
     val emoji: String = "",
     /** Learned: answered correctly enough times (see Scheduler). */
     val known: Boolean = false,
-    /** How many correct answers in a row, on different days. */
+    /** Position on the Scheduler's ladder of pauses. */
     val level: Int = 0,
+    /** Right answers in a row. */
+    val streak: Int = 0,
+    /** Version of the scheduling scheme this card was last saved with. */
+    val scheme: Int = 1,
     /** When the card should be shown again; 0 means right away. */
     val dueAt: Long = 0L,
     val correctCount: Int = 0,

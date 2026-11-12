@@ -141,13 +141,11 @@ private fun App(vm: AppViewModel) {
 
                 Screen.Study -> StudyScreen(
                     queue = vm.studyQueue,
-                    session = vm.studySession,
-                    index = vm.studyIndex,
-                    knownCount = vm.studyKnownCount,
-                    missed = vm.studyMissed,
+                    step = vm.studyStep,
+                    total = vm.studyTotal,
+                    done = vm.studyDone,
                     onAnswer = { card, known -> vm.answer(card, known) },
                     onSpeak = { text -> vm.speak(text) },
-                    onRepeatMissed = { vm.startStudyWith(vm.studyMissed.shuffled()) },
                     onExit = { vm.goHome() },
                 )
             }

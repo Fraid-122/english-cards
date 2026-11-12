@@ -30,9 +30,16 @@ class CardRepository(private val dir: File) {
             StarterCards.create().forEach { writeFile(it) }
             seededMarker.writeText("1")
         }
+        val now = System.currentTimeMillis()
         _cards.value = dir.listFiles { file -> file.extension == "json" }.orEmpty()
             .mapNotNull { file ->
                 runCatching { json.decodeFromString(Card.serializer(), file.readText()) }.getOrNull()
+            }
+            .map { card ->
+                // Cards from earlier versions are converted to the current schedule once.
+                val migrated = Scheduler.migrate(card, now)
+                if (migrated != card) writeFile(migrated)
+                migrated
             }
             .sortedByDescending { it.createdAt }
     }
