@@ -14,6 +14,7 @@ import com.fraid.englishcards.ui.CollectionsScreen
 import com.fraid.englishcards.ui.EditCardScreen
 import com.fraid.englishcards.ui.EnglishCardsTheme
 import com.fraid.englishcards.ui.HomeScreen
+import com.fraid.englishcards.ui.SettingsScreen
 import com.fraid.englishcards.ui.StudyScreen
 
 class MainActivity : ComponentActivity() {
@@ -44,11 +45,15 @@ private fun App(vm: AppViewModel) {
             onAdd = { vm.navigate(Screen.Edit(cardId = null)) },
             onList = { vm.navigate(Screen.CardList()) },
             onCollections = { vm.navigate(Screen.Collections) },
+            onSettings = { vm.navigate(Screen.Settings) },
+            aiEnabled = vm.aiEnabled,
         )
 
         is Screen.Edit -> EditCardScreen(
             existing = cards.firstOrNull { it.id == screen.cardId },
             topics = cards.map { it.topic }.distinct().sorted(),
+            aiEnabled = vm.aiEnabled,
+            onSuggest = { text -> vm.suggest(text) },
             onSave = { card ->
                 vm.save(card)
                 vm.back()
@@ -71,6 +76,14 @@ private fun App(vm: AppViewModel) {
             onBack = { vm.back() },
             onOpen = { topic, difficulty -> vm.navigate(Screen.CardList(topic, difficulty)) },
             onStudy = { topic, difficulty -> vm.startStudy(topic, difficulty) },
+        )
+
+        Screen.Settings -> SettingsScreen(
+            apiKey = vm.apiKey,
+            model = vm.aiModel,
+            onSave = { key, model -> vm.saveAiSettings(key, model) },
+            onTest = { key, model -> vm.testAi(key, model) },
+            onBack = { vm.back() },
         )
 
         Screen.Study -> StudyScreen(

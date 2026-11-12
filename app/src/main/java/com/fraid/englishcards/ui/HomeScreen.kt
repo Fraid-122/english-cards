@@ -31,6 +31,8 @@ fun HomeScreen(
     onAdd: () -> Unit,
     onList: () -> Unit,
     onCollections: () -> Unit,
+    onSettings: () -> Unit,
+    aiEnabled: Boolean,
 ) {
     val toLearn = cards.count { !it.known }
     val known = cards.count { it.known }
@@ -81,6 +83,7 @@ fun HomeScreen(
             HomeButton("Додати картку", onAdd)
             HomeButton("Переглянути картки", onList)
             HomeButton("Теми та складність", onCollections)
+            HomeButton(if (aiEnabled) "Налаштування ШІ" else "Увімкнути ШІ-переклад", onSettings)
         }
     }
 }
