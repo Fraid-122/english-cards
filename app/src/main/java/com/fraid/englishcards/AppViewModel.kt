@@ -11,6 +11,7 @@ import com.fraid.englishcards.data.AiSuggestion
 import com.fraid.englishcards.data.Card
 import com.fraid.englishcards.data.CardRepository
 import com.fraid.englishcards.data.Difficulty
+import com.fraid.englishcards.data.OfflineTranslator
 import com.fraid.englishcards.data.SettingsStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.StateFlow
@@ -31,6 +32,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val repository = CardRepository(File(app.filesDir, "cards"))
 
     private val settings = SettingsStore(app)
+    private val translator = OfflineTranslator()
 
     val cards: StateFlow<List<Card>> = repository.cards
 
@@ -96,7 +98,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         aiModel = settings.model
     }
 
-    /** Asks the AI for the translation, topic, difficulty and picture of a new card. */
+    /** Translates on the phone: English to Ukrainian, Ukrainian to English. */
+    suspend fun translate(text: String): String = translator.translate(text)
+
+    override fun onCleared() {
+        translator.close()
+        super.onCleared()
+    }
+
+    /** Asks the AI for the picture, topic, difficulty and example of a new card. */
     suspend fun suggest(text: String): AiSuggestion =
         AiClient.suggest(
             apiKey = apiKey,

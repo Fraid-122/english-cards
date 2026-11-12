@@ -83,7 +83,7 @@ fun HomeScreen(
             HomeButton("Додати картку", onAdd)
             HomeButton("Переглянути картки", onList)
             HomeButton("Теми та складність", onCollections)
-            HomeButton(if (aiEnabled) "Налаштування ШІ" else "Увімкнути ШІ-переклад", onSettings)
+            HomeButton(if (aiEnabled) "Налаштування ШІ" else "Увімкнути ШІ (картинки й теми)", onSettings)
         }
     }
 }

@@ -16,6 +16,10 @@ android {
         // Each CI build gets a higher number, so a new APK installs over the old one.
         versionCode = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInt()
         versionName = "0.1." + (System.getenv("GITHUB_RUN_NUMBER") ?: "0")
+        // Phones only: keeps the APK smaller (the offline translator ships native code).
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+        }
     }
 
     signingConfigs {
@@ -62,6 +66,9 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.10.1")
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.7")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.0")
+
+    // Offline translation on the phone, no key and no limits.
+    implementation("com.google.mlkit:translate:17.0.3")
 
     testImplementation("junit:junit:4.13.2")
 }

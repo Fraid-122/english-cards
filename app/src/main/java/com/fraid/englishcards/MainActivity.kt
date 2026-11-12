@@ -53,6 +53,7 @@ private fun App(vm: AppViewModel) {
             existing = cards.firstOrNull { it.id == screen.cardId },
             topics = cards.map { it.topic }.distinct().sorted(),
             aiEnabled = vm.aiEnabled,
+            onTranslate = { text -> vm.translate(text) },
             onSuggest = { text -> vm.suggest(text) },
             onSave = { card ->
                 vm.save(card)

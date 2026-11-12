@@ -64,8 +64,9 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(
-                text = "ШІ перекладає слова, підбирає тему, складність і картинку. " +
-                    "Він працює через безкоштовний API-ключ Google Gemini і потребує інтернету.",
+                text = "Переклад працює офлайн і без ключа. ШІ потрібен лише для картинки, теми, " +
+                    "складності та прикладу речення. Він працює через безкоштовний API-ключ " +
+                    "Google Gemini і потребує інтернету.",
                 style = MaterialTheme.typography.bodyMedium,
             )
             Text(
