@@ -1,6 +1,8 @@
 package com.fraid.englishcards
 
 import android.app.Application
+import android.speech.tts.TextToSpeech
+import android.widget.Toast
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -12,11 +14,13 @@ import com.fraid.englishcards.data.Card
 import com.fraid.englishcards.data.CardRepository
 import com.fraid.englishcards.data.Difficulty
 import com.fraid.englishcards.data.OfflineTranslator
+import com.fraid.englishcards.data.Scheduler
 import com.fraid.englishcards.data.SettingsStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import java.io.File
+import java.util.Locale
 
 sealed interface Screen {
     data object Home : Screen
@@ -67,8 +71,37 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var studyMissed by mutableStateOf(listOf<Card>())
         private set
 
+    private var tts: TextToSpeech? = null
+    private var ttsReady = false
+
     init {
         viewModelScope.launch(Dispatchers.IO) { repository.load() }
+        tts = TextToSpeech(app) { status ->
+            if (status == TextToSpeech.SUCCESS) {
+                val result = tts?.setLanguage(Locale.US)
+                ttsReady = result != TextToSpeech.LANG_MISSING_DATA &&
+                    result != TextToSpeech.LANG_NOT_SUPPORTED
+            }
+        }
+    }
+
+    /** Says the English word aloud with the phone's built-in voice. */
+    fun speak(text: String) {
+        val engine = tts
+        if (engine == null || !ttsReady || text.isBlank()) {
+            Toast.makeText(
+                getApplication<Application>(),
+                "Озвучення недоступне: на телефоні немає англійського голосу.",
+                Toast.LENGTH_SHORT,
+            ).show()
+            return
+        }
+        engine.speak(text, TextToSpeech.QUEUE_FLUSH, null, "card")
+    }
+
+    /** Switches between the bottom tabs. */
+    fun selectTab(screen: Screen) {
+        stack = listOf(screen)
     }
 
     fun navigate(screen: Screen) {
@@ -103,6 +136,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     override fun onCleared() {
         translator.close()
+        tts?.shutdown()
+        tts = null
         super.onCleared()
     }
 
@@ -119,10 +154,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     suspend fun testAi(key: String, model: String): AiSuggestion =
         AiClient.suggest(apiKey = key, model = model, text = "apple", topics = emptyList())
 
-    /** Starts a session with the cards still to learn, optionally only one topic or difficulty. */
+    /** Starts a session with the cards that are due now, optionally only one topic or difficulty. */
     fun startStudy(topic: String? = null, difficulty: Difficulty? = null) {
+        val now = System.currentTimeMillis()
         val queue = cards.value
-            .filter { !it.known }
+            .filter { Scheduler.isDue(it, now) }
             .filter { topic == null || it.topic == topic }
             .filter { difficulty == null || it.difficulty == difficulty }
             .shuffled()
@@ -142,13 +178,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Records the answer: swiped right (known) or left (not known). */
     fun answer(card: Card, known: Boolean) {
         val latest = cards.value.firstOrNull { it.id == card.id } ?: card
-        save(
-            latest.copy(
-                known = known,
-                correctCount = latest.correctCount + if (known) 1 else 0,
-                wrongCount = latest.wrongCount + if (known) 0 else 1,
-            )
-        )
+        save(Scheduler.afterAnswer(latest, known, System.currentTimeMillis()))
         if (known) studyKnownCount += 1 else studyMissed = studyMissed + card
         studyIndex += 1
     }

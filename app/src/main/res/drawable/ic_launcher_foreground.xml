@@ -6,15 +6,15 @@
     android:viewportHeight="108">
     <!-- back card -->
     <path
-        android:fillColor="#9FA8DA"
+        android:fillColor="#8F7CEB"
         android:pathData="M40,34h30a4,4 0,0 1,4 4v38a4,4 0,0 1,-4 4h-30a4,4 0,0 1,-4 -4v-38a4,4 0,0 1,4 -4z" />
     <!-- front card -->
     <path
-        android:fillColor="#FFFFFF"
+        android:fillColor="#A898F0"
         android:pathData="M34,28h30a4,4 0,0 1,4 4v38a4,4 0,0 1,-4 4h-30a4,4 0,0 1,-4 -4v-38a4,4 0,0 1,4 -4z" />
     <!-- check mark -->
     <path
-        android:strokeColor="#2E7D32"
+        android:strokeColor="#16112B"
         android:strokeWidth="5"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"

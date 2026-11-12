@@ -1,7 +1,10 @@
+@file:OptIn(ExperimentalMaterial3Api::class)
+
 package com.fraid.englishcards.ui
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -15,12 +18,18 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -35,10 +44,10 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerInput
@@ -66,9 +75,13 @@ fun StudyScreen(
     knownCount: Int,
     missed: List<Card>,
     onAnswer: (Card, Boolean) -> Unit,
+    onSpeak: (String) -> Unit,
     onRepeatMissed: () -> Unit,
     onExit: () -> Unit,
 ) {
+    // Whether the typing field is open; remembered from card to card.
+    var typing by rememberSaveable { mutableStateOf(false) }
+
     Scaffold(
         topBar = { AppTopBar(title = "Навчання", onBack = onExit) },
     ) { padding ->
@@ -103,6 +116,9 @@ fun StudyScreen(
                 key(session, card.id) {
                     StudyCard(
                         card = card,
+                        typing = typing,
+                        onToggleTyping = { typing = !typing },
+                        onSpeak = { onSpeak(card.word) },
                         onAnswer = { known -> onAnswer(card, known) },
                         modifier = Modifier.weight(1f),
                     )
@@ -115,6 +131,9 @@ fun StudyScreen(
 @Composable
 private fun StudyCard(
     card: Card,
+    typing: Boolean,
+    onToggleTyping: () -> Unit,
+    onSpeak: () -> Unit,
     onAnswer: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -148,16 +167,37 @@ private fun StudyCard(
     val progress = if (forced != 0) forced.toFloat()
     else (offsetX.value / threshold).coerceIn(-1f, 1f)
     val tint = if (progress >= 0f) KnownGreen else UnknownRed
-    val container = lerp(MaterialTheme.colorScheme.surfaceVariant, tint, abs(progress) * 0.9f)
-    val content = if (abs(progress) > 0.45f) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+    val container = lerp(MaterialTheme.colorScheme.surface, tint, abs(progress) * 0.9f)
+    val content = if (abs(progress) > 0.45f) AccentForeground else MaterialTheme.colorScheme.onSurface
+    val cardShape = MaterialTheme.shapes.extraLarge
+    val cardBorder = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
 
     Column(modifier = modifier.fillMaxWidth()) {
         Box(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                .padding(vertical = 14.dp),
+                .padding(vertical = 14.dp, horizontal = 6.dp),
         ) {
+            // Two tilted sheets behind the card make it look like a deck.
+            Surface(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 8.dp)
+                    .graphicsLayer { rotationZ = -2.5f },
+                shape = cardShape,
+                color = MaterialTheme.colorScheme.surface,
+                border = cardBorder,
+            ) {}
+            Surface(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 8.dp)
+                    .graphicsLayer { rotationZ = 2.5f },
+                shape = cardShape,
+                color = MaterialTheme.colorScheme.surface,
+                border = cardBorder,
+            ) {}
             Surface(
                 onClick = { if (!answered) revealed = !revealed },
                 modifier = Modifier
@@ -184,10 +224,10 @@ private fun StudyCard(
                             }
                         }
                     },
-                shape = RoundedCornerShape(28.dp),
+                shape = cardShape,
                 color = container,
                 contentColor = content,
-                shadowElevation = 6.dp,
+                border = cardBorder,
             ) {
                 Column(
                     modifier = Modifier
@@ -197,7 +237,7 @@ private fun StudyCard(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterVertically),
                 ) {
-                    CardAvatar(card = card, size = 88.dp)
+                    CardAvatar(card = card, size = 104.dp)
                     Text(
                         text = card.translation,
                         style = MaterialTheme.typography.headlineMedium,
@@ -238,9 +278,21 @@ private fun StudyCard(
             }
         }
 
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally),
+        ) {
+            FilledTonalIconButton(onClick = onToggleTyping, modifier = Modifier.size(52.dp)) {
+                Icon(Icons.Default.Edit, contentDescription = "Вписати слово")
+            }
+            FilledTonalIconButton(onClick = onSpeak, modifier = Modifier.size(52.dp)) {
+                Icon(Icons.Default.PlayArrow, contentDescription = "Послухати слово")
+            }
+        }
+
         val typed = input.isNotBlank()
         val lettersOk = AnswerChecker.isPrefixOk(input, card.word)
-        OutlinedTextField(
+        if (typing) OutlinedTextField(
             value = input,
             onValueChange = { text ->
                 if (!answered) {
@@ -276,14 +328,14 @@ private fun StudyCard(
         ) {
             Button(
                 onClick = { fling(right = false) },
-                colors = ButtonDefaults.buttonColors(containerColor = UnknownRed, contentColor = Color.White),
+                colors = ButtonDefaults.buttonColors(containerColor = UnknownRed, contentColor = AccentForeground),
                 modifier = Modifier
                     .weight(1f)
                     .height(52.dp),
             ) { Text("Не знаю") }
             Button(
                 onClick = { fling(right = true) },
-                colors = ButtonDefaults.buttonColors(containerColor = KnownGreen, contentColor = Color.White),
+                colors = ButtonDefaults.buttonColors(containerColor = KnownGreen, contentColor = AccentForeground),
                 modifier = Modifier
                     .weight(1f)
                     .height(52.dp),

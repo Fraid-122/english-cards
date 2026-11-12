@@ -42,6 +42,7 @@ import com.fraid.englishcards.data.AiSuggestion
 import com.fraid.englishcards.data.Card
 import com.fraid.englishcards.data.Difficulty
 import com.fraid.englishcards.data.LanguageDetector
+import com.fraid.englishcards.data.Scheduler
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -285,7 +286,7 @@ fun EditCardScreen(
             if (!aiEnabled) {
                 Text(
                     text = "Картинку, тему й приклад підбирає ШІ. Щоб увімкнути його, додай " +
-                        "API-ключ на головному екрані: «Увімкнути ШІ (картинки й теми)».",
+                        "API-ключ у вкладці «Налаштування».",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -373,17 +374,15 @@ fun EditCardScreen(
                         translation = "",
                         createdAt = System.currentTimeMillis(),
                     )
-                    onSave(
-                        base.copy(
-                            word = word.trim(),
-                            translation = translation.trim(),
-                            example = example.trim(),
-                            topic = topic.trim().ifBlank { Card.DEFAULT_TOPIC },
-                            difficulty = difficulty,
-                            emoji = emoji.trim(),
-                            known = known,
-                        )
+                    val edited = base.copy(
+                        word = word.trim(),
+                        translation = translation.trim(),
+                        example = example.trim(),
+                        topic = topic.trim().ifBlank { Card.DEFAULT_TOPIC },
+                        difficulty = difficulty,
+                        emoji = emoji.trim(),
                     )
+                    onSave(if (known != base.known) Scheduler.markKnown(edited, known) else edited)
                 },
                 enabled = canSave,
                 modifier = Modifier

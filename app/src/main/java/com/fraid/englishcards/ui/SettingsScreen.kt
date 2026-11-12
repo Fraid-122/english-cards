@@ -40,7 +40,7 @@ fun SettingsScreen(
     model: String,
     onSave: (key: String, model: String) -> Unit,
     onTest: suspend (key: String, model: String) -> AiSuggestion,
-    onBack: () -> Unit,
+    onBack: (() -> Unit)? = null,
 ) {
     var keyText by rememberSaveable { mutableStateOf(apiKey) }
     var modelText by rememberSaveable { mutableStateOf(model) }

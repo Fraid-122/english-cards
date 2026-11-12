@@ -1,5 +1,6 @@
 package com.fraid.englishcards.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -23,18 +24,20 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import com.fraid.englishcards.data.Card
 import com.fraid.englishcards.data.Difficulty
+import com.fraid.englishcards.data.Scheduler
 
 @Composable
 fun CollectionsScreen(
     cards: List<Card>,
-    onBack: () -> Unit,
+    onBack: (() -> Unit)? = null,
     onOpen: (topic: String?, difficulty: Difficulty?) -> Unit,
     onStudy: (topic: String?, difficulty: Difficulty?) -> Unit,
 ) {
     val topics = cards.map { it.topic }.distinct().sorted()
+    val now = System.currentTimeMillis()
 
     Scaffold(
-        topBar = { AppTopBar(title = "Теми та складність", onBack = onBack) },
+        topBar = { AppTopBar(title = "Бібліотека", onBack = onBack) },
     ) { padding ->
         LazyColumn(
             modifier = Modifier
@@ -43,6 +46,16 @@ fun CollectionsScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
+            item(key = "all-cards") {
+                GroupRow(
+                    name = "Усі картки",
+                    total = cards.size,
+                    known = cards.count { it.known },
+                    due = cards.count { Scheduler.isDue(it, now) },
+                    onOpen = { onOpen(null, null) },
+                    onStudy = { onStudy(null, null) },
+                )
+            }
             item(key = "header-topics") { SectionHeader("За темою") }
             if (topics.isEmpty()) {
                 item(key = "empty-topics") {
@@ -58,6 +71,7 @@ fun CollectionsScreen(
                     name = name,
                     total = group.size,
                     known = group.count { it.known },
+                    due = group.count { Scheduler.isDue(it, now) },
                     onOpen = { onOpen(name, null) },
                     onStudy = { onStudy(name, null) },
                 )
@@ -70,6 +84,7 @@ fun CollectionsScreen(
                     name = level.label,
                     total = group.size,
                     known = group.count { it.known },
+                    due = group.count { Scheduler.isDue(it, now) },
                     onOpen = { onOpen(null, level) },
                     onStudy = { onStudy(null, level) },
                 )
@@ -92,6 +107,7 @@ private fun GroupRow(
     name: String,
     total: Int,
     known: Int,
+    due: Int,
     onOpen: () -> Unit,
     onStudy: () -> Unit,
 ) {
@@ -102,7 +118,8 @@ private fun GroupRow(
             .clip(shape)
             .clickable(onClick = onOpen),
         shape = shape,
-        color = MaterialTheme.colorScheme.surfaceVariant,
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
         Row(
             modifier = Modifier.padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 12.dp),
@@ -111,12 +128,12 @@ private fun GroupRow(
             Column(modifier = Modifier.weight(1f)) {
                 Text(text = name, style = MaterialTheme.typography.titleMedium)
                 Text(
-                    text = "Карток: $total · знаю: $known · вивчити: ${total - known}",
+                    text = "Карток: $total · вчити зараз: $due · вивчено: $known",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            TextButton(onClick = onStudy, enabled = total - known > 0) {
+            TextButton(onClick = onStudy, enabled = due > 0) {
                 Text("Вчити")
             }
         }
