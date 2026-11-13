@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
@@ -25,14 +26,26 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import com.fraid.englishcards.ui.ArticleEditScreen
+import com.fraid.englishcards.ui.ArticleScreen
+import com.fraid.englishcards.ui.ArticlesScreen
 import com.fraid.englishcards.ui.CardListScreen
+import com.fraid.englishcards.ui.ChatScreen
 import com.fraid.englishcards.ui.CollectionsScreen
+import com.fraid.englishcards.ui.DecksScreen
 import com.fraid.englishcards.ui.EditCardScreen
 import com.fraid.englishcards.ui.EnglishCardsTheme
+import com.fraid.englishcards.ui.ExerciseScreen
 import com.fraid.englishcards.ui.HomeScreen
+import com.fraid.englishcards.ui.LibraryScreen
+import com.fraid.englishcards.ui.PracticeScreen
 import com.fraid.englishcards.ui.SettingsScreen
 import com.fraid.englishcards.ui.StudyScreen
+import com.fraid.englishcards.ui.VideoScreen
+import com.fraid.englishcards.ui.VideosScreen
+import com.fraid.englishcards.ui.WordActions
 
 class MainActivity : ComponentActivity() {
 
@@ -56,6 +69,17 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun App(vm: AppViewModel) {
     val cards by vm.cards.collectAsState()
+    val articles by vm.articles.collectAsState()
+    val videos by vm.videos.collectAsState()
+    val wordActions = remember(vm) {
+        WordActions(
+            translate = { text -> vm.translate(text) },
+            speak = { text -> vm.speak(text) },
+            save = { word, translation, sentence, topic ->
+                vm.addCardFromContent(word, translation, sentence, topic)
+            },
+        )
+    }
     val isRoot = vm.stack.size == 1
     val root = vm.stack.first()
 
@@ -75,8 +99,14 @@ private fun App(vm: AppViewModel) {
                         label = { Text("Навчання") },
                     )
                     NavigationBarItem(
-                        selected = root == Screen.Collections,
-                        onClick = { vm.selectTab(Screen.Collections) },
+                        selected = root == Screen.Practice,
+                        onClick = { vm.selectTab(Screen.Practice) },
+                        icon = { Icon(Icons.Default.Edit, contentDescription = null) },
+                        label = { Text("Практика") },
+                    )
+                    NavigationBarItem(
+                        selected = root == Screen.Library,
+                        onClick = { vm.selectTab(Screen.Library) },
                         icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) },
                         label = { Text("Бібліотека") },
                     )
@@ -84,7 +114,7 @@ private fun App(vm: AppViewModel) {
                         selected = root == Screen.Settings,
                         onClick = { vm.selectTab(Screen.Settings) },
                         icon = { Icon(Icons.Default.Settings, contentDescription = null) },
-                        label = { Text("Налаштування") },
+                        label = { Text("Опції") },
                     )
                 }
             }
@@ -99,6 +129,7 @@ private fun App(vm: AppViewModel) {
             when (val screen = vm.stack.last()) {
                 Screen.Home -> HomeScreen(
                     cards = cards,
+                    streakDays = vm.streakDays,
                     onStudy = { vm.startStudy() },
                     onAdd = { vm.navigate(Screen.Edit(cardId = null)) },
                 )
@@ -126,8 +157,91 @@ private fun App(vm: AppViewModel) {
                     onDelete = { card -> vm.delete(card.id) },
                 )
 
+                Screen.Library -> LibraryScreen(
+                    cardCount = cards.size,
+                    articleCount = articles.size,
+                    videoCount = videos.size,
+                    onCards = { vm.navigate(Screen.CardList()) },
+                    onGroups = { vm.navigate(Screen.Collections) },
+                    onDecks = { vm.navigate(Screen.Decks) },
+                    onArticles = { vm.navigate(Screen.Articles) },
+                    onVideos = { vm.navigate(Screen.Videos) },
+                )
+
+                Screen.Decks -> DecksScreen(
+                    cards = cards,
+                    onAdd = { deck -> vm.addDeck(deck) },
+                    onBack = { vm.back() },
+                )
+
+                Screen.Articles -> ArticlesScreen(
+                    articles = articles,
+                    onOpen = { article -> vm.navigate(Screen.ArticleView(article.id)) },
+                    onAdd = { vm.navigate(Screen.ArticleEdit) },
+                    onDelete = { article -> vm.deleteArticle(article.id) },
+                    onBack = { vm.back() },
+                )
+
+                Screen.ArticleEdit -> ArticleEditScreen(
+                    onSave = { title, text ->
+                        vm.saveArticle(title, text)
+                        vm.back()
+                    },
+                    onBack = { vm.back() },
+                )
+
+                is Screen.ArticleView -> {
+                    val article = articles.firstOrNull { it.id == screen.articleId }
+                    if (article != null) {
+                        ArticleScreen(article = article, actions = wordActions, onBack = { vm.back() })
+                    }
+                }
+
+                Screen.Videos -> VideosScreen(
+                    videos = videos,
+                    busy = vm.videoBusy,
+                    onOpen = { video -> vm.navigate(Screen.VideoView(video.id)) },
+                    onAdd = { link -> vm.addVideo(link) },
+                    onDelete = { video -> vm.deleteVideo(video.id) },
+                    onBack = { vm.back() },
+                )
+
+                is Screen.VideoView -> {
+                    val video = videos.firstOrNull { it.id == screen.id }
+                    if (video != null) {
+                        VideoScreen(
+                            video = video,
+                            actions = wordActions,
+                            onSaveText = { text -> vm.saveVideoText(video.id, text) },
+                            onBack = { vm.back() },
+                        )
+                    }
+                }
+
+                Screen.Practice -> PracticeScreen(
+                    cards = cards,
+                    aiEnabled = vm.aiEnabled,
+                    onExercise = { mode -> vm.navigate(Screen.Exercise(mode)) },
+                    onChat = { vm.navigate(Screen.Chat) },
+                )
+
+                is Screen.Exercise -> ExerciseScreen(
+                    cards = cards,
+                    mode = screen.mode,
+                    onSpeak = { text -> vm.speak(text) },
+                    onBack = { vm.back() },
+                )
+
+                Screen.Chat -> ChatScreen(
+                    aiEnabled = vm.aiEnabled,
+                    onSend = { messages -> vm.chat(messages) },
+                    actions = wordActions,
+                    onBack = { vm.back() },
+                )
+
                 Screen.Collections -> CollectionsScreen(
                     cards = cards,
+                    onBack = { vm.back() },
                     onOpen = { topic, difficulty -> vm.navigate(Screen.CardList(topic, difficulty)) },
                     onStudy = { topic, difficulty -> vm.startStudy(topic, difficulty) },
                 )

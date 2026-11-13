@@ -1,0 +1,100 @@
+package com.fraid.englishcards
+
+import com.fraid.englishcards.data.AiClient
+import com.fraid.englishcards.data.Decks
+import com.fraid.englishcards.data.Streak
+import com.fraid.englishcards.data.TextTools
+import com.fraid.englishcards.data.YouTubeCaptions
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class ContentToolsTest {
+
+    private val text = "I wake up at seven. Then I don't eat; I make tea!\nThe end"
+
+    @Test
+    fun picksTheWordUnderTheTap() {
+        assertEquals("wake", TextTools.wordAt(text, text.indexOf("wake") + 2))
+        assertEquals("don't", TextTools.wordAt(text, text.indexOf("don't") + 4))
+        // A tap right after a word still picks it.
+        assertEquals("seven", TextTools.wordAt(text, text.indexOf("seven") + 5))
+        assertNull(TextTools.wordAt("a  b", 2))
+        assertNull(TextTools.wordAt("", 0))
+    }
+
+    @Test
+    fun picksTheSentenceAroundTheTap() {
+        assertEquals("I wake up at seven.", TextTools.sentenceAt(text, 3))
+        assertEquals("Then I don't eat; I make tea!", TextTools.sentenceAt(text, text.indexOf("tea")))
+        assertEquals("The end", TextTools.sentenceAt(text, text.length - 1))
+    }
+
+    @Test
+    fun makesGapSentence() {
+        assertEquals("I eat an _____ every day.", TextTools.gapSentence("I eat an apple every day.", "apple"))
+        assertEquals("_____ is good.", TextTools.gapSentence("Bread is good.", "bread"))
+        assertNull(TextTools.gapSentence("Let's figure it out.", "to figure out"))
+    }
+
+    @Test
+    fun readsYouTubeLinks() {
+        assertEquals("dQw4w9WgXcQ", TextTools.youtubeId("https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=10s"))
+        assertEquals("dQw4w9WgXcQ", TextTools.youtubeId("https://youtu.be/dQw4w9WgXcQ?si=abc"))
+        assertEquals("dQw4w9WgXcQ", TextTools.youtubeId("https://youtube.com/shorts/dQw4w9WgXcQ"))
+        assertEquals("dQw4w9WgXcQ", TextTools.youtubeId(" dQw4w9WgXcQ "))
+        assertNull(TextTools.youtubeId("https://example.com/video"))
+    }
+
+    @Test
+    fun streakGrowsDayByDayAndResets() {
+        assertEquals(1, Streak.afterStudy(lastDay = 0, streak = 0, today = 100))
+        assertEquals(1, Streak.afterStudy(lastDay = 100, streak = 1, today = 100))
+        assertEquals(2, Streak.afterStudy(lastDay = 100, streak = 1, today = 101))
+        assertEquals(1, Streak.afterStudy(lastDay = 100, streak = 5, today = 103))
+        assertEquals(5, Streak.current(lastDay = 100, streak = 5, today = 101))
+        assertEquals(0, Streak.current(lastDay = 100, streak = 5, today = 102))
+    }
+
+    @Test
+    fun decksAreWellFormed() {
+        assertTrue(Decks.all.isNotEmpty())
+        Decks.all.forEach { deck ->
+            val cards = deck.cards(now = 1000)
+            assertEquals(deck.size, cards.size)
+            cards.forEach { card ->
+                assertTrue(card.word.isNotBlank())
+                assertTrue(card.translation.isNotBlank())
+                assertTrue(card.example.isNotBlank())
+                assertEquals(deck.title, card.topic)
+            }
+        }
+    }
+
+    @Test
+    fun findsEnglishCaptionTrack() {
+        val html = """<html><title>My &amp; video - YouTube</title><script>var x = {"captions":{"playerCaptionsTracklistRenderer":{"captionTracks":[{"baseUrl":"https://www.youtube.com/api/timedtext?v=1&lang=uk","languageCode":"uk"},{"baseUrl":"https://www.youtube.com/api/timedtext?v=1&lang=en&kind=asr","languageCode":"en","kind":"asr","name":{"simpleText":"English [auto]"}},{"baseUrl":"https://www.youtube.com/api/timedtext?v=1&lang=en","languageCode":"en"}],"audioTracks":[]}}};</script></html>"""
+        assertEquals("https://www.youtube.com/api/timedtext?v=1&lang=en", YouTubeCaptions.captionTrackUrl(html))
+        assertEquals("My & video", YouTubeCaptions.parseTitle(html))
+        assertNull(YouTubeCaptions.captionTrackUrl("<html>no captions</html>"))
+    }
+
+    @Test
+    fun readsJson3Subtitles() {
+        val json3 = """{"events":[{"tStartMs":0,"dDurationMs":1000},{"tStartMs":1200,"segs":[{"utf8":"Hello "},{"utf8":"world"}]},{"tStartMs":2000,"segs":[{"utf8":"\n"}]},{"tStartMs":3000,"segs":[{"utf8":"Second\nline"}]}]}"""
+        val lines = YouTubeCaptions.parseJson3(json3)
+        assertEquals(2, lines.size)
+        assertEquals(1200L, lines[0].startMs)
+        assertEquals("Hello world", lines[0].text)
+        assertEquals("Second line", lines[1].text)
+        assertTrue(YouTubeCaptions.parseJson3("broken").isEmpty())
+    }
+
+    @Test
+    fun readsChatReply() {
+        val response = """{"candidates":[{"content":{"parts":[{"text":"Hi! How are you?"}]}}]}"""
+        assertEquals("Hi! How are you?", AiClient.extractText(response))
+        assertTrue(AiClient.chatInstruction(listOf("apple", "bread")).contains("[apple, bread]"))
+    }
+}

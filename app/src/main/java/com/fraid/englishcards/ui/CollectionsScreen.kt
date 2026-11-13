@@ -37,7 +37,7 @@ fun CollectionsScreen(
     val now = System.currentTimeMillis()
 
     Scaffold(
-        topBar = { AppTopBar(title = "Бібліотека", onBack = onBack) },
+        topBar = { AppTopBar(title = "Теми та складність", onBack = onBack) },
     ) { padding ->
         LazyColumn(
             modifier = Modifier

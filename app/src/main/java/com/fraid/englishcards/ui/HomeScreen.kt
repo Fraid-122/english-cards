@@ -4,7 +4,6 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -37,6 +36,7 @@ import kotlinx.coroutines.delay
 @Composable
 fun HomeScreen(
     cards: List<Card>,
+    streakDays: Int,
     onStudy: () -> Unit,
     onAdd: () -> Unit,
 ) {
@@ -71,7 +71,11 @@ fun HomeScreen(
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Spacer(Modifier.height(8.dp))
+        Text(
+            text = if (streakDays > 0) "🔥 Серія: $streakDays дн. поспіль" else "Почни серію: позаймайся сьогодні",
+            style = MaterialTheme.typography.titleSmall,
+            color = if (streakDays > 0) InProgressAmber else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
 
         Surface(
             shape = MaterialTheme.shapes.large,

@@ -27,6 +27,9 @@ data class AiSuggestion(
     val emoji: String,
 )
 
+/** One message of the conversation with the tutor. */
+data class ChatMessage(val fromUser: Boolean, val text: String)
+
 /** An AI problem with a message that can be shown to the user. */
 class AiException(message: String) : Exception(message)
 
@@ -43,8 +46,6 @@ object AiClient {
         text: String,
         topics: List<String>,
     ): AiSuggestion = withContext(Dispatchers.IO) {
-        if (apiKey.isBlank()) throw AiException("Додай API-ключ у налаштуваннях ШІ.")
-
         val body = buildJsonObject {
             putJsonArray("contents") {
                 addJsonObject {
@@ -58,7 +59,53 @@ object AiClient {
                 put("responseMimeType", "application/json")
             }
         }.toString()
+        parseResponse(post(apiKey, model, body))
+    }
 
+    /** Continues a conversation with the tutor; returns the tutor's next message. */
+    suspend fun chat(
+        apiKey: String,
+        model: String,
+        messages: List<ChatMessage>,
+        words: List<String>,
+    ): String = withContext(Dispatchers.IO) {
+        val body = buildJsonObject {
+            putJsonObject("systemInstruction") {
+                putJsonArray("parts") {
+                    addJsonObject { put("text", chatInstruction(words)) }
+                }
+            }
+            putJsonArray("contents") {
+                messages.forEach { message ->
+                    addJsonObject {
+                        put("role", if (message.fromUser) "user" else "model")
+                        putJsonArray("parts") {
+                            addJsonObject { put("text", message.text) }
+                        }
+                    }
+                }
+            }
+            putJsonObject("generationConfig") {
+                put("temperature", 0.7)
+            }
+        }.toString()
+        extractText(post(apiKey, model, body))?.trim()?.takeIf { it.isNotEmpty() }
+            ?: throw AiException("ШІ не повернув відповідь. Спробуй ще раз.")
+    }
+
+    fun chatInstruction(words: List<String>): String {
+        val list = words.filter { it.isNotBlank() }.distinct().take(25).joinToString(", ")
+        return """
+            You are a friendly English conversation partner for a Ukrainian speaker who is learning English.
+            Reply only in simple English, in one to three short sentences, and end with a question to keep the talk going.
+            If the learner makes a mistake, first show the corrected sentence in one line starting with "Better:", then continue.
+            When it fits naturally, use some of the words the learner is studying: [$list].
+        """.trimIndent()
+    }
+
+    /** Sends the request and returns the raw response; throws [AiException] with a readable message. */
+    private fun post(apiKey: String, model: String, body: String): String {
+        if (apiKey.isBlank()) throw AiException("Додай API-ключ у налаштуваннях ШІ.")
         val modelId = model.trim().ifBlank { DEFAULT_MODEL }
         val url = URL("https://generativelanguage.googleapis.com/v1beta/models/$modelId:generateContent")
         val connection = url.openConnection() as HttpURLConnection
@@ -75,7 +122,7 @@ object AiClient {
             val stream = if (code in 200..299) connection.inputStream else connection.errorStream
             val response = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
             if (code !in 200..299) throw AiException(errorMessage(code))
-            parseResponse(response)
+            return response
         } catch (e: IOException) {
             throw AiException("Немає зв'язку з ШІ. Перевір інтернет.")
         } finally {
@@ -102,9 +149,9 @@ object AiClient {
         """.trimIndent()
     }
 
-    /** Reads the Gemini API response envelope and the card suggestion inside it. */
-    fun parseResponse(response: String): AiSuggestion {
-        val text = try {
+    /** The text the model wrote, taken out of the Gemini API response envelope. */
+    fun extractText(response: String): String? =
+        try {
             json.parseToJsonElement(response).jsonObject["candidates"]
                 ?.jsonArray?.firstOrNull()
                 ?.jsonObject?.get("content")
@@ -117,6 +164,10 @@ object AiClient {
         } catch (e: IllegalArgumentException) {
             null
         }
+
+    /** Reads the Gemini API response envelope and the card suggestion inside it. */
+    fun parseResponse(response: String): AiSuggestion {
+        val text = extractText(response)
         if (text.isNullOrBlank()) throw AiException("ШІ не повернув відповідь. Спробуй ще раз.")
         return parseSuggestion(text)
     }

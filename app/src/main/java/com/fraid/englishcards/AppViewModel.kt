@@ -10,17 +10,29 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.fraid.englishcards.data.AiClient
 import com.fraid.englishcards.data.AiSuggestion
+import com.fraid.englishcards.data.Article
 import com.fraid.englishcards.data.Card
 import com.fraid.englishcards.data.CardRepository
+import com.fraid.englishcards.data.ChatMessage
+import com.fraid.englishcards.data.Deck
 import com.fraid.englishcards.data.Difficulty
+import com.fraid.englishcards.data.JsonFileStore
 import com.fraid.englishcards.data.OfflineTranslator
 import com.fraid.englishcards.data.Scheduler
 import com.fraid.englishcards.data.SettingsStore
+import com.fraid.englishcards.data.StarterArticles
+import com.fraid.englishcards.data.Streak
+import com.fraid.englishcards.data.TextTools
+import com.fraid.englishcards.data.Video
+import com.fraid.englishcards.data.YouTubeCaptions
+import com.fraid.englishcards.ui.ExerciseMode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.Locale
+import java.util.UUID
 
 sealed interface Screen {
     data object Home : Screen
@@ -29,6 +41,16 @@ sealed interface Screen {
     data object Collections : Screen
     data object Study : Screen
     data object Settings : Screen
+    data object Library : Screen
+    data object Practice : Screen
+    data object Decks : Screen
+    data object Articles : Screen
+    data object ArticleEdit : Screen
+    data class ArticleView(val articleId: String) : Screen
+    data object Videos : Screen
+    data class VideoView(val id: String) : Screen
+    data class Exercise(val mode: ExerciseMode) : Screen
+    data object Chat : Screen
 }
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
@@ -38,7 +60,26 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val settings = SettingsStore(app)
     private val translator = OfflineTranslator()
 
+    private val articleStore = JsonFileStore(
+        File(app.filesDir, "articles"), Article.serializer(), { it.id }, { it.createdAt },
+    )
+    private val videoStore = JsonFileStore(
+        File(app.filesDir, "videos"), Video.serializer(), { it.id }, { it.createdAt },
+    )
+
     val cards: StateFlow<List<Card>> = repository.cards
+    val articles: StateFlow<List<Article>> = articleStore.items
+    val videos: StateFlow<List<Video>> = videoStore.items
+
+    /** True while a video and its subtitles are being loaded. */
+    var videoBusy by mutableStateOf(false)
+        private set
+
+    /** Days in a row with study. */
+    var streakDays by mutableStateOf(
+        Streak.current(settings.lastStudyDay, settings.streak, Streak.today())
+    )
+        private set
 
     /** The user's own Gemini API key; empty means AI features are off. */
     var apiKey by mutableStateOf(settings.apiKey)
@@ -73,7 +114,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private var ttsReady = false
 
     init {
-        viewModelScope.launch(Dispatchers.IO) { repository.load() }
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.load()
+            articleStore.load { StarterArticles.create() }
+            videoStore.load()
+        }
         tts = TextToSpeech(app) { status ->
             if (status == TextToSpeech.SUCCESS) {
                 val result = tts?.setLanguage(Locale.US)
@@ -96,6 +141,113 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
         engine.speak(text, TextToSpeech.QUEUE_FLUSH, null, "card")
     }
+
+    private fun toast(text: String) {
+        Toast.makeText(getApplication<Application>(), text, Toast.LENGTH_SHORT).show()
+    }
+
+    // ---- Content: ready-made sets, articles, videos ----
+
+    /** Adds the cards of a ready-made set, skipping words the user already has. */
+    fun addDeck(deck: Deck) {
+        val existing = cards.value.map { it.word.lowercase() }.toSet()
+        val fresh = deck.cards().filter { it.word.lowercase() !in existing }
+        viewModelScope.launch(Dispatchers.IO) { fresh.forEach { repository.save(it) } }
+        toast("Додано карток: ${fresh.size}")
+    }
+
+    /** Saves a word picked from an article, a video or the chat as a card. */
+    fun addCardFromContent(word: String, translation: String, sentence: String, topic: String) {
+        if (word.isBlank() || translation.isBlank()) return
+        if (cards.value.any { it.word.equals(word, ignoreCase = true) }) {
+            toast("Така картка вже є.")
+            return
+        }
+        val card = Card(
+            id = UUID.randomUUID().toString(),
+            word = word,
+            translation = translation,
+            example = sentence.takeIf { it.contains(word, ignoreCase = true) && it != word }.orEmpty(),
+            topic = topic.ifBlank { Card.DEFAULT_TOPIC },
+            createdAt = System.currentTimeMillis(),
+        )
+        toast("Картку збережено.")
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { repository.save(card) }
+            // The AI, when it is on, adds a picture and a difficulty in the background.
+            if (aiEnabled) {
+                val suggestion = runCatching { suggest(word) }.getOrNull() ?: return@launch
+                val latest = cards.value.firstOrNull { it.id == card.id } ?: return@launch
+                withContext(Dispatchers.IO) {
+                    repository.save(
+                        latest.copy(
+                            emoji = suggestion.emoji.ifBlank { latest.emoji },
+                            difficulty = suggestion.difficulty,
+                            example = latest.example.ifBlank { suggestion.example },
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    fun saveArticle(title: String, text: String) {
+        val article = Article(
+            id = UUID.randomUUID().toString(),
+            title = title,
+            text = text,
+            createdAt = System.currentTimeMillis(),
+        )
+        viewModelScope.launch(Dispatchers.IO) { articleStore.save(article) }
+    }
+
+    fun deleteArticle(id: String) {
+        viewModelScope.launch(Dispatchers.IO) { articleStore.delete(id) }
+    }
+
+    /** Adds a YouTube video by its link and tries to load its English subtitles. */
+    fun addVideo(link: String) {
+        val videoId = TextTools.youtubeId(link)
+        if (videoId == null) {
+            toast("Це не схоже на посилання YouTube.")
+            return
+        }
+        videoBusy = true
+        viewModelScope.launch {
+            val loaded = runCatching { YouTubeCaptions.load(videoId) }.getOrNull()
+            val video = Video(
+                id = UUID.randomUUID().toString(),
+                videoId = videoId,
+                title = loaded?.title?.takeIf { it.isNotBlank() } ?: "Відео $videoId",
+                lines = loaded?.lines.orEmpty(),
+                createdAt = System.currentTimeMillis(),
+            )
+            withContext(Dispatchers.IO) { videoStore.save(video) }
+            videoBusy = false
+            toast(
+                if (video.lines.isEmpty()) "Відео додано, але субтитри завантажити не вдалося."
+                else "Відео додано із субтитрами."
+            )
+        }
+    }
+
+    fun saveVideoText(id: String, text: String) {
+        val video = videos.value.firstOrNull { it.id == id } ?: return
+        viewModelScope.launch(Dispatchers.IO) { videoStore.save(video.copy(text = text)) }
+    }
+
+    fun deleteVideo(id: String) {
+        viewModelScope.launch(Dispatchers.IO) { videoStore.delete(id) }
+    }
+
+    /** Continues the English conversation, nudging the AI to use the user's words. */
+    suspend fun chat(messages: List<ChatMessage>): String =
+        AiClient.chat(
+            apiKey = apiKey,
+            model = aiModel,
+            messages = messages,
+            words = cards.value.filter { !it.known }.shuffled().take(25).map { it.word },
+        )
 
     /** Switches between the bottom tabs. */
     fun selectTab(screen: Screen) {
@@ -179,6 +331,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun answer(card: Card, known: Boolean) {
         val latest = cards.value.firstOrNull { it.id == card.id } ?: card
         save(Scheduler.afterAnswer(latest, known, System.currentTimeMillis()))
+
+        val today = Streak.today()
+        val streak = Streak.afterStudy(settings.lastStudyDay, settings.streak, today)
+        settings.lastStudyDay = today
+        settings.streak = streak
+        streakDays = streak
 
         val rest = studyQueue.filterNot { it.id == card.id }
         studyQueue = if (known) rest else rest + card
