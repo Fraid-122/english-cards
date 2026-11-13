@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -29,6 +30,7 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
 import com.fraid.englishcards.data.AiClient
 import com.fraid.englishcards.data.AiSuggestion
+import com.fraid.englishcards.data.VoiceClient
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
@@ -40,8 +42,20 @@ fun SettingsScreen(
     model: String,
     onSave: (key: String, model: String) -> Unit,
     onTest: suspend (key: String, model: String) -> AiSuggestion,
+    voiceKey: String,
+    voiceId: String,
+    voiceModel: String,
+    onSaveVoice: (key: String, voice: String, model: String) -> Unit,
+    onTestVoice: suspend (key: String, voice: String, model: String) -> Unit,
     onBack: (() -> Unit)? = null,
 ) {
+    var voiceKeyText by rememberSaveable { mutableStateOf(voiceKey) }
+    var voiceIdText by rememberSaveable { mutableStateOf(voiceId) }
+    var voiceModelText by rememberSaveable { mutableStateOf(voiceModel) }
+    var voiceStatus by remember { mutableStateOf<String?>(null) }
+    var voiceStatusIsError by remember { mutableStateOf(false) }
+    var voiceTesting by remember { mutableStateOf(false) }
+
     var keyText by rememberSaveable { mutableStateOf(apiKey) }
     var modelText by rememberSaveable { mutableStateOf(model) }
     var status by remember { mutableStateOf<String?>(null) }
@@ -51,7 +65,7 @@ fun SettingsScreen(
     val uriHandler = LocalUriHandler.current
 
     Scaffold(
-        topBar = { AppTopBar(title = "Налаштування ШІ", onBack = onBack) },
+        topBar = { AppTopBar(title = "Налаштування", onBack = onBack) },
     ) { padding ->
         Column(
             modifier = Modifier
@@ -63,6 +77,7 @@ fun SettingsScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            Text("ШІ для картинок і тем", style = MaterialTheme.typography.titleLarge)
             Text(
                 text = "Переклад працює офлайн і без ключа. ШІ потрібен лише для картинки, теми, " +
                     "складності та прикладу речення. Він працює через безкоштовний API-ключ " +
@@ -149,6 +164,103 @@ fun SettingsScreen(
                     text = message,
                     style = MaterialTheme.typography.bodyMedium,
                     color = if (statusIsError) MaterialTheme.colorScheme.error else KnownGreen,
+                )
+            }
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+            Text("Озвучення ElevenLabs", style = MaterialTheme.typography.titleLarge)
+            Text(
+                text = "Якісний голос замість вбудованого голосу телефона. Кожна фраза озвучується один раз " +
+                    "і зберігається на телефоні, тож повторне прослуховування не витрачає символи підписки " +
+                    "і працює без інтернету. Без ключа лишається голос телефона.",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Text(
+                text = "Ключ створюється на сайті ElevenLabs у розділі API Keys. " +
+                    "Йому потрібен дозвіл на Text to Speech.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            OutlinedButton(
+                onClick = { runCatching { uriHandler.openUri("https://elevenlabs.io/app/settings/api-keys") } },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Відкрити ключі ElevenLabs")
+            }
+            OutlinedTextField(
+                value = voiceKeyText,
+                onValueChange = { voiceKeyText = it },
+                label = { Text("API-ключ ElevenLabs") },
+                supportingText = { Text("Ключ зберігається лише на цьому телефоні.") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = voiceIdText,
+                onValueChange = { voiceIdText = it },
+                label = { Text("ID голосу") },
+                supportingText = { Text("Скопіюй ID улюбленого голосу з ElevenLabs. Стандартний: George.") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = voiceModelText,
+                onValueChange = { voiceModelText = it },
+                label = { Text("Модель") },
+                supportingText = {
+                    Text("Стандартна: ${VoiceClient.DEFAULT_MODEL}. Дешевша: eleven_flash_v2_5.")
+                },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedButton(
+                    onClick = {
+                        voiceTesting = true
+                        voiceStatus = "Озвучую приклад…"
+                        voiceStatusIsError = false
+                        scope.launch {
+                            try {
+                                onTestVoice(voiceKeyText, voiceIdText, voiceModelText)
+                                voiceStatus = "Працює. Якщо голос подобається, натисни «Зберегти»."
+                                voiceStatusIsError = false
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                voiceStatus = e.message ?: "Помилка озвучення."
+                                voiceStatusIsError = true
+                            } finally {
+                                voiceTesting = false
+                            }
+                        }
+                    },
+                    enabled = !voiceTesting && voiceKeyText.isNotBlank(),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(52.dp),
+                ) {
+                    Text("Послухати")
+                }
+                Button(
+                    onClick = {
+                        onSaveVoice(voiceKeyText, voiceIdText, voiceModelText)
+                        voiceStatus = "Збережено."
+                        voiceStatusIsError = false
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(52.dp),
+                ) {
+                    Text("Зберегти")
+                }
+            }
+            val voiceMessage = voiceStatus
+            if (voiceMessage != null) {
+                Text(
+                    text = voiceMessage,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (voiceStatusIsError) MaterialTheme.colorScheme.error else KnownGreen,
                 )
             }
         }

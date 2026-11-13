@@ -1,6 +1,7 @@
 package com.fraid.englishcards
 
 import android.app.Application
+import android.media.MediaPlayer
 import android.speech.tts.TextToSpeech
 import android.widget.Toast
 import androidx.compose.runtime.getValue
@@ -24,8 +25,10 @@ import com.fraid.englishcards.data.StarterArticles
 import com.fraid.englishcards.data.Streak
 import com.fraid.englishcards.data.TextTools
 import com.fraid.englishcards.data.Video
+import com.fraid.englishcards.data.VoiceClient
 import com.fraid.englishcards.data.YouTubeCaptions
 import com.fraid.englishcards.ui.ExerciseMode
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -129,8 +132,75 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** Says the English word aloud with the phone's built-in voice. */
+    // ---- Speech: ElevenLabs when a key is set, otherwise the phone's built-in voice ----
+
+    var voiceKey by mutableStateOf(settings.voiceKey)
+        private set
+
+    var voiceId by mutableStateOf(settings.voiceId)
+        private set
+
+    var voiceModel by mutableStateOf(settings.voiceModel)
+        private set
+
+    private val speechDir = File(app.filesDir, "speech")
+    private var player: MediaPlayer? = null
+
+    fun saveVoiceSettings(key: String, voice: String, model: String) {
+        settings.voiceKey = key
+        settings.voiceId = voice
+        settings.voiceModel = model
+        voiceKey = settings.voiceKey
+        voiceId = settings.voiceId
+        voiceModel = settings.voiceModel
+    }
+
+    private fun play(file: File) {
+        player?.release()
+        val next = MediaPlayer()
+        player = next
+        next.setOnCompletionListener { finished ->
+            finished.release()
+            if (player === finished) player = null
+        }
+        next.setDataSource(file.absolutePath)
+        next.prepare()
+        next.start()
+    }
+
+    /** Says the English word or phrase aloud. */
     fun speak(text: String) {
+        val phrase = text.trim()
+        if (phrase.isEmpty()) return
+        if (voiceKey.isBlank()) {
+            speakWithPhoneVoice(phrase)
+            return
+        }
+        viewModelScope.launch {
+            try {
+                val file = withContext(Dispatchers.IO) {
+                    VoiceClient.fileFor(speechDir, voiceKey, voiceId, voiceModel, phrase)
+                }
+                play(file)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Fall back to the phone's voice so the user still hears the word.
+                toast(e.message ?: "Не вдалося озвучити через ElevenLabs.")
+                speakWithPhoneVoice(phrase)
+            }
+        }
+    }
+
+    /** Generates and plays a sample with the given ElevenLabs settings; throws when it fails. */
+    suspend fun testVoice(key: String, voice: String, model: String) {
+        val file = withContext(Dispatchers.IO) {
+            VoiceClient.fileFor(speechDir, key, voice, model, "Hello! This is how your cards will sound.")
+        }
+        play(file)
+    }
+
+    private fun speakWithPhoneVoice(text: String) {
         val engine = tts
         if (engine == null || !ttsReady || text.isBlank()) {
             Toast.makeText(
@@ -299,6 +369,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         translator.close()
         tts?.shutdown()
         tts = null
+        player?.release()
+        player = null
         super.onCleared()
     }
 

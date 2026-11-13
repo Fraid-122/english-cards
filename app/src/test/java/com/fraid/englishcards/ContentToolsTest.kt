@@ -5,6 +5,7 @@ import com.fraid.englishcards.data.BigDecks
 import com.fraid.englishcards.data.Decks
 import com.fraid.englishcards.data.Streak
 import com.fraid.englishcards.data.TextTools
+import com.fraid.englishcards.data.VoiceClient
 import com.fraid.englishcards.data.YouTubeCaptions
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -126,6 +127,23 @@ class ContentToolsTest {
         assertEquals("Hello world", lines[0].text)
         assertEquals("Second line", lines[1].text)
         assertTrue(YouTubeCaptions.parseJson3("broken").isEmpty())
+    }
+
+    @Test
+    fun speechCacheNameIsStableAndSpecific() {
+        val name = VoiceClient.cacheName("voice", "model", "Apple")
+        assertEquals(name, VoiceClient.cacheName("voice", "model", "  apple "))
+        assertTrue(name.endsWith(".mp3"))
+        assertTrue(name != VoiceClient.cacheName("voice", "model", "apples"))
+        assertTrue(name != VoiceClient.cacheName("other", "model", "apple"))
+        assertTrue(name != VoiceClient.cacheName("voice", "other", "apple"))
+    }
+
+    @Test
+    fun explainsElevenLabsErrors() {
+        assertTrue(VoiceClient.errorMessage(401, """{"detail":{"status":"quota_exceeded"}}""").contains("ліміт"))
+        assertTrue(VoiceClient.errorMessage(401, """{"detail":{"status":"invalid_api_key"}}""").contains("не підходить"))
+        assertTrue(VoiceClient.errorMessage(404, "").contains("Голос"))
     }
 
     @Test

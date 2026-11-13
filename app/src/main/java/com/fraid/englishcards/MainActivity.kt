@@ -266,6 +266,11 @@ private fun App(vm: AppViewModel) {
                     model = vm.aiModel,
                     onSave = { key, model -> vm.saveAiSettings(key, model) },
                     onTest = { key, model -> vm.testAi(key, model) },
+                    voiceKey = vm.voiceKey,
+                    voiceId = vm.voiceId,
+                    voiceModel = vm.voiceModel,
+                    onSaveVoice = { key, voice, model -> vm.saveVoiceSettings(key, voice, model) },
+                    onTestVoice = { key, voice, model -> vm.testVoice(key, voice, model) },
                 )
 
                 Screen.Study -> StudyScreen(
