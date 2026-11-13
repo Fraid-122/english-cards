@@ -34,6 +34,8 @@ import com.fraid.englishcards.ui.ArticlesScreen
 import com.fraid.englishcards.ui.CardListScreen
 import com.fraid.englishcards.ui.ChatScreen
 import com.fraid.englishcards.ui.CollectionsScreen
+import com.fraid.englishcards.data.Decks
+import com.fraid.englishcards.ui.DeckSortScreen
 import com.fraid.englishcards.ui.DecksScreen
 import com.fraid.englishcards.ui.EditCardScreen
 import com.fraid.englishcards.ui.EnglishCardsTheme
@@ -170,9 +172,22 @@ private fun App(vm: AppViewModel) {
 
                 Screen.Decks -> DecksScreen(
                     cards = cards,
-                    onAdd = { deck -> vm.addDeck(deck) },
+                    onOpen = { deck -> vm.navigate(Screen.DeckSort(deck.id)) },
                     onBack = { vm.back() },
                 )
+
+                is Screen.DeckSort -> {
+                    val deck = Decks.all.firstOrNull { it.id == screen.deckId }
+                    if (deck != null) {
+                        DeckSortScreen(
+                            deck = deck,
+                            cards = cards,
+                            onSorted = { card, known -> vm.addSortedCard(card, known) },
+                            onAddAll = { rest -> vm.addCards(rest) },
+                            onBack = { vm.back() },
+                        )
+                    }
+                }
 
                 Screen.Articles -> ArticlesScreen(
                     articles = articles,

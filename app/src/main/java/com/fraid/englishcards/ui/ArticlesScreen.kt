@@ -35,6 +35,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.fraid.englishcards.data.Article
+import com.fraid.englishcards.data.TextSpan
 
 @Composable
 fun ArticlesScreen(
@@ -135,16 +136,31 @@ fun ArticleEditScreen(
     }
 }
 
-/** The reader: tap any word to see its translation and save it as a card. */
+/** The reader: select a word, several words or a sentence to translate it and save a card. */
 @Composable
 fun ArticleScreen(
     article: Article,
     actions: WordActions,
     onBack: () -> Unit,
 ) {
-    var picked by remember { mutableStateOf<PickedWord?>(null) }
+    var selection by remember(article.id) { mutableStateOf<TextSpan?>(null) }
 
-    Scaffold(topBar = { AppTopBar(title = "Читання", onBack = onBack) }) { padding ->
+    Scaffold(
+        topBar = { AppTopBar(title = "Читання", onBack = onBack) },
+        bottomBar = {
+            val span = selection
+            if (span != null) {
+                SelectionPanel(
+                    text = article.text,
+                    span = span,
+                    onSpan = { selection = it },
+                    topic = article.title,
+                    actions = actions,
+                    onClose = { selection = null },
+                )
+            }
+        },
+    ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -159,25 +175,17 @@ fun ArticleScreen(
                 fontWeight = FontWeight.SemiBold,
             )
             Text(
-                text = "Торкнись слова, щоб побачити переклад і зберегти картку.",
+                text = "Торкнись слова, щоб побачити переклад. Щоб виділити кілька слів чи речення, " +
+                    "затисни слово і протягни пальцем.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            TappableText(
+            SelectableText(
                 text = article.text,
-                onWord = { picked = it },
+                selection = selection,
+                onSelection = { selection = it },
                 style = MaterialTheme.typography.bodyLarge.copy(fontSize = 19.sp, lineHeight = 30.sp),
             )
         }
-    }
-
-    val current = picked
-    if (current != null) {
-        WordDialog(
-            picked = current,
-            topic = article.title,
-            actions = actions,
-            onDismiss = { picked = null },
-        )
     }
 }

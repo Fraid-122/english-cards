@@ -49,6 +49,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.fraid.englishcards.data.TextSpan
 import com.fraid.englishcards.data.Video
 
 private const val PLAYER_ORIGIN = "https://com.fraid.englishcards"
@@ -200,6 +201,9 @@ fun VideoScreen(
     var picked by remember { mutableStateOf<PickedWord?>(null) }
     var quickWord by remember { mutableStateOf("") }
     var pasted by remember { mutableStateOf("") }
+    // The selected piece of the subtitles: which line (or -1 for the pasted text) and where in it.
+    var selectedLine by remember { mutableStateOf(-1) }
+    var selection by remember { mutableStateOf<TextSpan?>(null) }
 
     val webView = remember(video.videoId) {
         WebView(context).apply {
@@ -218,6 +222,12 @@ fun VideoScreen(
     fun pick(word: PickedWord) {
         webView.evaluateJavascript("pauseVideo()", null)
         picked = word
+    }
+
+    fun select(line: Int, span: TextSpan) {
+        if (selection == null) webView.evaluateJavascript("pauseVideo()", null)
+        selectedLine = line
+        selection = span
     }
 
     Scaffold(topBar = { AppTopBar(title = video.title, onBack = onBack) }) { padding ->
@@ -283,9 +293,10 @@ fun VideoScreen(
                                         webView.evaluateJavascript("seekTo(${line.startMs / 1000.0})", null)
                                     },
                                 )
-                                TappableText(
+                                SelectableText(
                                     text = line.text,
-                                    onWord = { pick(it) },
+                                    selection = if (index == selectedLine) selection else null,
+                                    onSelection = { select(index, it) },
                                     style = MaterialTheme.typography.bodyLarge.copy(fontSize = 18.sp, lineHeight = 26.sp),
                                     color = if (index == current) MaterialTheme.colorScheme.primary
                                     else MaterialTheme.colorScheme.onSurface,
@@ -303,9 +314,10 @@ fun VideoScreen(
                             .verticalScroll(rememberScrollState())
                             .padding(16.dp),
                     ) {
-                        TappableText(
+                        SelectableText(
                             text = video.text,
-                            onWord = { pick(it) },
+                            selection = if (selectedLine == -1) selection else null,
+                            onSelection = { select(-1, it) },
                             style = MaterialTheme.typography.bodyLarge.copy(fontSize = 18.sp, lineHeight = 28.sp),
                         )
                     }
@@ -339,6 +351,19 @@ fun VideoScreen(
                         ) { Text("Зберегти текст") }
                     }
                 }
+            }
+
+            val span = selection
+            val selectedText = if (selectedLine >= 0) video.lines.getOrNull(selectedLine)?.text else video.text
+            if (span != null && selectedText != null) {
+                SelectionPanel(
+                    text = selectedText,
+                    span = span,
+                    onSpan = { selection = it },
+                    topic = "Відео",
+                    actions = actions,
+                    onClose = { selection = null },
+                )
             }
         }
     }

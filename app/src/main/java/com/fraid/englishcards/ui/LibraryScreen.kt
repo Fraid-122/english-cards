@@ -98,7 +98,7 @@ fun LibraryScreen(
 @Composable
 fun DecksScreen(
     cards: List<Card>,
-    onAdd: (Deck) -> Unit,
+    onOpen: (Deck) -> Unit,
     onBack: () -> Unit,
 ) {
     val known = cards.map { it.word.lowercase() }.toSet()
@@ -116,11 +116,11 @@ fun DecksScreen(
                     emoji = deck.emoji,
                     title = deck.title,
                     subtitle = "Рівень ${deck.level} · слів: ${deck.size}" +
-                        if (missing == 0) " · уже додано" else "",
-                    onClick = { if (missing > 0) onAdd(deck) },
+                        if (missing == 0) " · усі вже у тебе" else " · нових: $missing",
+                    onClick = { onOpen(deck) },
                     trailing = {
-                        TextButton(onClick = { onAdd(deck) }, enabled = missing > 0) {
-                            Text(if (missing == 0) "Додано" else "Додати")
+                        TextButton(onClick = { onOpen(deck) }) {
+                            Text(if (missing == 0) "Готово" else "Розібрати")
                         }
                     },
                 )

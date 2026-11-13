@@ -32,6 +32,29 @@ class ContentToolsTest {
     }
 
     @Test
+    fun selectionGrowsWordByWordAndToSentence() {
+        val start = text.indexOf("wake")
+        val word = TextTools.wordSpanAt(text, start)!!
+        assertEquals("wake", text.substring(word.start, word.end))
+        val left = TextTools.expandLeft(text, word.start)
+        assertEquals("I wake", text.substring(left, word.end))
+        val right = TextTools.expandRight(text, word.end)
+        assertEquals("wake up", text.substring(word.start, right))
+        // Nothing before the first word; nothing after the last one.
+        assertEquals(0, TextTools.expandLeft(text, 0))
+        assertEquals(text.length, TextTools.expandRight(text, text.length))
+        // Growing stops at a line break.
+        val end = text.indexOf("The end")
+        assertEquals(end, TextTools.expandLeft(text, end))
+        val sentence = TextTools.sentenceSpanAt(text, text.indexOf("tea"))
+        assertEquals("Then I don't eat; I make tea!", text.substring(sentence.start, sentence.end))
+        // Quotes around a word are not part of it.
+        val quoted = "He said 'hello' twice"
+        val hello = TextTools.wordSpanAt(quoted, quoted.indexOf("hello"))!!
+        assertEquals("hello", quoted.substring(hello.start, hello.end))
+    }
+
+    @Test
     fun makesGapSentence() {
         assertEquals("I eat an _____ every day.", TextTools.gapSentence("I eat an apple every day.", "apple"))
         assertEquals("_____ is good.", TextTools.gapSentence("Bread is good.", "bread"))

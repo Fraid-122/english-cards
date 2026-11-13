@@ -44,6 +44,7 @@ sealed interface Screen {
     data object Library : Screen
     data object Practice : Screen
     data object Decks : Screen
+    data class DeckSort(val deckId: String) : Screen
     data object Articles : Screen
     data object ArticleEdit : Screen
     data class ArticleView(val articleId: String) : Screen
@@ -154,6 +155,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val fresh = deck.cards().filter { it.word.lowercase() !in existing }
         viewModelScope.launch(Dispatchers.IO) { fresh.forEach { repository.save(it) } }
         toast("Додано карток: ${fresh.size}")
+    }
+
+    /** Adds one card of a set: to study, or straight to the learned ones when the user knows it. */
+    fun addSortedCard(card: Card, known: Boolean) {
+        save(if (known) Scheduler.markKnown(card, true) else card)
+    }
+
+    /** Adds cards of a set to study without sorting them. */
+    fun addCards(cards: List<Card>) {
+        viewModelScope.launch(Dispatchers.IO) { cards.forEach { repository.save(it) } }
     }
 
     /** Saves a word picked from an article, a video or the chat as a card. */

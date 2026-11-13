@@ -1,5 +1,8 @@
 package com.fraid.englishcards.data
 
+/** A selected piece of a text: from [start] up to, but not including, [end]. */
+data class TextSpan(val start: Int, val end: Int)
+
 /** Small text helpers: picking a word from a text, making exercises, reading links. */
 object TextTools {
 
@@ -7,8 +10,8 @@ object TextTools {
 
     private fun isWordChar(c: Char): Boolean = c.isLetter() || c == '\'' || c == '’' || c == '-'
 
-    /** The word under the character at [offset], or null when it is a space or a symbol. */
-    fun wordAt(text: String, offset: Int): String? {
+    /** Where the word under the character at [offset] starts and ends, or null for a space or symbol. */
+    fun wordSpanAt(text: String, offset: Int): TextSpan? {
         if (text.isEmpty()) return null
         var i = offset.coerceIn(0, text.length - 1)
         if (!isWordChar(text[i])) {
@@ -18,8 +21,50 @@ object TextTools {
         while (start > 0 && isWordChar(text[start - 1])) start--
         var end = i
         while (end < text.length - 1 && isWordChar(text[end + 1])) end++
-        val word = text.substring(start, end + 1).trim('\'', '’', '-')
-        return word.takeIf { candidate -> candidate.any { it.isLetter() } }
+        // Drop quotes and dashes around the word.
+        while (start <= end && !text[start].isLetter()) start++
+        while (end >= start && !text[end].isLetter()) end--
+        return if (start > end) null else TextSpan(start, end + 1)
+    }
+
+    /** The word under the character at [offset], or null when it is a space or a symbol. */
+    fun wordAt(text: String, offset: Int): String? =
+        wordSpanAt(text, offset)?.let { text.substring(it.start, it.end) }
+
+    /** The start of the word before [start] on the same line, or [start] when there is none. */
+    fun expandLeft(text: String, start: Int): Int {
+        var i = start.coerceIn(0, text.length) - 1
+        while (i >= 0 && !text[i].isLetter()) {
+            if (text[i] == '\n') return start
+            i--
+        }
+        if (i < 0) return start
+        return wordSpanAt(text, i)?.start ?: start
+    }
+
+    /** The end of the word after [end] on the same line, or [end] when there is none. */
+    fun expandRight(text: String, end: Int): Int {
+        var i = end.coerceIn(0, text.length)
+        while (i < text.length && !text[i].isLetter()) {
+            if (text[i] == '\n') return end
+            i++
+        }
+        if (i >= text.length) return end
+        return wordSpanAt(text, i)?.end ?: end
+    }
+
+    /** Where the sentence around the character at [offset] starts and ends. */
+    fun sentenceSpanAt(text: String, offset: Int): TextSpan {
+        if (text.isEmpty()) return TextSpan(0, 0)
+        val i = offset.coerceIn(0, text.length - 1)
+        var start = i
+        while (start > 0 && text[start - 1] !in SENTENCE_END) start--
+        var end = i
+        while (end < text.length - 1 && text[end] !in SENTENCE_END) end++
+        while (start < end && text[start].isWhitespace()) start++
+        var endExclusive = end + 1
+        while (endExclusive > start && text[endExclusive - 1].isWhitespace()) endExclusive--
+        return TextSpan(start, endExclusive)
     }
 
     /** The sentence around the character at [offset]. */
