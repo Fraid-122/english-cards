@@ -39,7 +39,7 @@ class Deck(
 ) {
     val size: Int get() = entries.size
 
-    /** Entries are written as "word|translation|example|emoji". */
+    /** Entries are written as "word|translation|example|emoji"; the emoji may be left out. */
     fun cards(now: Long = System.currentTimeMillis()): List<Card> =
         entries.mapIndexed { index, entry ->
             val parts = entry.split('|')
@@ -48,7 +48,7 @@ class Deck(
                 word = parts[0],
                 translation = parts.getOrElse(1) { "" },
                 example = parts.getOrElse(2) { "" },
-                emoji = parts.getOrElse(3) { "" },
+                emoji = parts.getOrNull(3)?.takeIf { it.isNotBlank() } ?: emoji,
                 topic = title,
                 difficulty = difficulty,
                 createdAt = now - index,
@@ -57,7 +57,10 @@ class Deck(
 }
 
 object Decks {
-    val all: List<Deck> = listOf(
+    /** The large themed sets first, then the short starter sets. */
+    val all: List<Deck> by lazy { BigDecks.all + starters }
+
+    private val starters: List<Deck> = listOf(
         Deck(
             "first-words", "Перші слова", "A1", "👋", Difficulty.EASY,
             listOf(

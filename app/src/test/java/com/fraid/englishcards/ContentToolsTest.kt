@@ -1,6 +1,7 @@
 package com.fraid.englishcards
 
 import com.fraid.englishcards.data.AiClient
+import com.fraid.englishcards.data.BigDecks
 import com.fraid.englishcards.data.Decks
 import com.fraid.englishcards.data.Streak
 import com.fraid.englishcards.data.TextTools
@@ -91,6 +92,19 @@ class ContentToolsTest {
                 assertTrue(card.translation.isNotBlank())
                 assertTrue(card.example.isNotBlank())
                 assertEquals(deck.title, card.topic)
+            }
+        }
+    }
+
+    @Test
+    fun bigDecksAreLargeAndUsableInGapExercise() {
+        assertEquals(10, BigDecks.all.size)
+        assertEquals(Decks.all.size, Decks.all.map { it.id }.toSet().size)
+        BigDecks.all.forEach { deck ->
+            assertTrue(deck.size >= 50)
+            deck.cards(now = 1000).forEach { card ->
+                assertTrue(card.word, TextTools.gapSentence(card.example, card.word) != null)
+                assertTrue(card.emoji.isNotBlank())
             }
         }
     }
