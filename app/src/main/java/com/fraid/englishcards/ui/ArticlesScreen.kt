@@ -175,8 +175,8 @@ fun ArticleScreen(
                 fontWeight = FontWeight.SemiBold,
             )
             Text(
-                text = "Торкнись слова, щоб побачити переклад. Щоб виділити кілька слів чи речення, " +
-                    "затисни слово і протягни пальцем.",
+                text = "Торкнись слова, щоб побачити переклад. Потім тягни круглі повзунки під виділенням, " +
+                    "щоб узяти кілька слів чи ціле речення.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

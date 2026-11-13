@@ -401,6 +401,23 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Translates on the phone: English to Ukrainian, Ukrainian to English. */
     suspend fun translate(text: String): String = translator.translate(text)
 
+    /**
+     * The best translation available for a piece of a text: the AI, which understands the
+     * sentence around it, when a key is set; otherwise (or if it fails) the offline translator.
+     */
+    suspend fun translateInContext(text: String, context: String): String {
+        if (aiEnabled) {
+            try {
+                return AiClient.translate(apiKey, aiModel, text, context)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Fall through to the offline translator.
+            }
+        }
+        return translator.translate(text)
+    }
+
     override fun onCleared() {
         translator.close()
         tts?.shutdown()

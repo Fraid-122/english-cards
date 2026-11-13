@@ -75,7 +75,7 @@ private fun App(vm: AppViewModel) {
     val videos by vm.videos.collectAsState()
     val wordActions = remember(vm) {
         WordActions(
-            translate = { text -> vm.translate(text) },
+            translate = { text, context -> vm.translateInContext(text, context) },
             speak = { text -> vm.speak(text) },
             save = { word, translation, sentence, topic ->
                 vm.addCardFromContent(word, translation, sentence, topic)

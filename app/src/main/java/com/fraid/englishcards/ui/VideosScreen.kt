@@ -52,9 +52,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.fraid.englishcards.data.Subtitles
 import com.fraid.englishcards.data.TextSpan
 import com.fraid.englishcards.data.Video
 
@@ -248,9 +250,10 @@ fun VideoScreen(
     var picked by remember { mutableStateOf<PickedWord?>(null) }
     var quickWord by remember { mutableStateOf("") }
     var pasted by remember { mutableStateOf("") }
-    // The selected piece of the subtitles: which line (or -1 for the pasted text) and where in it.
-    var selectedLine by remember { mutableStateOf(-1) }
-    var selection by remember { mutableStateOf<TextSpan?>(null) }
+    // Subtitle lines flow as one text, so a selection can run across lines.
+    val joined = remember(video.lines) { Subtitles.join(video.lines) }
+    val subtitleText = if (joined.text.isNotEmpty()) joined.text else video.text
+    var selection by remember(subtitleText) { mutableStateOf<TextSpan?>(null) }
 
     val webView = remember(video.videoId) {
         WebView(context).apply {
@@ -290,9 +293,8 @@ fun VideoScreen(
         picked = word
     }
 
-    fun select(line: Int, span: TextSpan) {
+    fun select(span: TextSpan) {
         if (selection == null) webView.evaluateJavascript("pauseVideo()", null)
-        selectedLine = line
         selection = span
     }
 
@@ -354,55 +356,36 @@ fun VideoScreen(
             }
 
             when {
-                video.lines.isNotEmpty() -> {
-                    val current = video.lines.indexOfLast { it.startMs <= positionMs }
-                    val listState = rememberLazyListState()
-                    LaunchedEffect(current) {
-                        if (current >= 0) listState.animateScrollToItem(maxOf(current - 1, 0))
-                    }
-                    LazyColumn(
-                        state = listState,
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth(),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        itemsIndexed(video.lines) { index, line ->
-                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                Text(
-                                    text = "▶",
-                                    color = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.clickable {
-                                        webView.evaluateJavascript("seekTo(${line.startMs / 1000.0})", null)
-                                    },
-                                )
-                                SelectableText(
-                                    text = line.text,
-                                    selection = if (index == selectedLine) selection else null,
-                                    onSelection = { select(index, it) },
-                                    style = MaterialTheme.typography.bodyLarge.copy(fontSize = 18.sp, lineHeight = 26.sp),
-                                    color = if (index == current) MaterialTheme.colorScheme.primary
-                                    else MaterialTheme.colorScheme.onSurface,
-                                    modifier = Modifier.weight(1f),
-                                )
-                            }
+                subtitleText.isNotBlank() -> {
+                    val current = joined.indexAt(positionMs)
+                    val scrollState = rememberScrollState()
+                    var textLayout by remember(subtitleText) { mutableStateOf<TextLayoutResult?>(null) }
+                    // Follow the speech, but stay put while the user is selecting.
+                    LaunchedEffect(current, textLayout) {
+                        val result = textLayout
+                        val span = joined.spanOf(current)
+                        if (result != null && span != null && selection == null &&
+                            result.layoutInput.text.length == subtitleText.length
+                        ) {
+                            val line = result.getLineForOffset(span.start.coerceIn(0, subtitleText.length))
+                            val top = result.getLineTop(maxOf(line - 1, 0)).toInt()
+                            scrollState.animateScrollTo(top)
                         }
                     }
-                }
-
-                video.text.isNotBlank() -> {
                     Column(
                         modifier = Modifier
                             .weight(1f)
-                            .verticalScroll(rememberScrollState())
-                            .padding(16.dp),
+                            .fillMaxWidth()
+                            .verticalScroll(scrollState)
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
                     ) {
                         SelectableText(
-                            text = video.text,
-                            selection = if (selectedLine == -1) selection else null,
-                            onSelection = { select(-1, it) },
-                            style = MaterialTheme.typography.bodyLarge.copy(fontSize = 18.sp, lineHeight = 28.sp),
+                            text = subtitleText,
+                            selection = selection,
+                            onSelection = { select(it) },
+                            emphasis = joined.spanOf(current),
+                            onLayout = { textLayout = it },
+                            style = MaterialTheme.typography.bodyLarge.copy(fontSize = 19.sp, lineHeight = 30.sp),
                         )
                     }
                 }
@@ -466,10 +449,9 @@ fun VideoScreen(
             }
 
             val span = selection
-            val selectedText = if (selectedLine >= 0) video.lines.getOrNull(selectedLine)?.text else video.text
-            if (span != null && selectedText != null) {
+            if (span != null && subtitleText.isNotBlank()) {
                 SelectionPanel(
-                    text = selectedText,
+                    text = subtitleText,
                     span = span,
                     onSpan = { selection = it },
                     topic = "Відео",

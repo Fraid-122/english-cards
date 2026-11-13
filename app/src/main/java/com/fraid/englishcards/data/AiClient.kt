@@ -94,6 +94,48 @@ object AiClient {
     }
 
     /**
+     * Translates [text] the way it is meant in [context]: English to Ukrainian or back.
+     * Gives natural phrasing for whole sentences, unlike word-by-word machine translation.
+     */
+    suspend fun translate(apiKey: String, model: String, text: String, context: String): String =
+        withContext(Dispatchers.IO) {
+            val body = buildJsonObject {
+                putJsonArray("contents") {
+                    addJsonObject {
+                        putJsonArray("parts") {
+                            addJsonObject { put("text", translatePrompt(text, context)) }
+                        }
+                    }
+                }
+                putJsonObject("generationConfig") {
+                    put("temperature", 0.1)
+                }
+            }.toString()
+            val answer = extractText(post(apiKey, model, body))?.let { cleanTranslation(it) }
+            if (answer.isNullOrBlank()) throw AiException("ШІ не повернув переклад.")
+            answer
+        }
+
+    fun translatePrompt(text: String, context: String): String {
+        val source = text.trim()
+        val direction = if (LanguageDetector.isUkrainian(source)) "from Ukrainian into natural English"
+        else "from English into natural, fluent Ukrainian"
+        val where = context.trim().takeIf { it.isNotEmpty() && it != source }
+            ?.let { "\nIt appears in this sentence, so use the meaning it has there: \"\"\"$it\"\"\"" }
+            .orEmpty()
+        return "Translate the text $direction, the way a good human translator would. " +
+            "Translate only the text itself, not the whole sentence around it. " +
+            "For a single word or short phrase give the dictionary form, at most two meanings separated by a comma. " +
+            "Answer with the translation only: no quotes, no notes.\n" +
+            "Text: \"\"\"$source\"\"\"$where"
+    }
+
+    /** Strips quotes and stray line breaks the model may add around a translation. */
+    fun cleanTranslation(answer: String): String =
+        answer.trim().lines().firstOrNull { it.isNotBlank() }.orEmpty()
+            .trim().trim('"', '«', '»', '“', '”').trim()
+
+    /**
      * Asks the AI to listen to a YouTube video and write down what is said, with times.
      * Used when the video has no subtitles. Works best for videos up to about 15 minutes.
      */

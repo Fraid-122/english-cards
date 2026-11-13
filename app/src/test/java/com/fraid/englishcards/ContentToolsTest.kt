@@ -4,6 +4,8 @@ import com.fraid.englishcards.data.AiClient
 import com.fraid.englishcards.data.BigDecks
 import com.fraid.englishcards.data.Decks
 import com.fraid.englishcards.data.Streak
+import com.fraid.englishcards.data.Subtitles
+import com.fraid.englishcards.data.VideoLine
 import com.fraid.englishcards.data.TextTools
 import com.fraid.englishcards.data.VoiceClient
 import com.fraid.englishcards.data.YouTubeCaptions
@@ -172,6 +174,41 @@ class ContentToolsTest {
         assertEquals(500L, lines[0].startMs)
         assertEquals("Second one", lines[1].text)
         assertTrue(AiClient.parseTranscript("no transcript").isEmpty())
+    }
+
+    @Test
+    fun subtitleLinesBecomeOneCleanText() {
+        val joined = Subtitles.join(
+            listOf(
+                VideoLine(0, ">> Hey,"),
+                VideoLine(1000, ">> but now she's fluent. Her English is"),
+                VideoLine(2500, "topnotch."),
+                VideoLine(3000, "[music]"),
+                VideoLine(4000, ">> So, how did she go from not [music]"),
+            )
+        )
+        assertEquals("Hey, but now she's fluent. Her English is topnotch. So, how did she go from not", joined.text)
+        assertEquals(4, joined.starts.size)
+        assertEquals(-1, joined.indexAt(-5))
+        assertEquals(1, joined.indexAt(1200))
+        assertEquals(2, joined.indexAt(3500))
+        val second = joined.spanOf(1)!!
+        assertEquals("but now she's fluent. Her English is", joined.text.substring(second.start, second.end))
+        val last = joined.spanOf(3)!!
+        assertEquals("So, how did she go from not", joined.text.substring(last.start, last.end))
+        // A sentence can now be found across two subtitle lines.
+        val sentence = TextTools.sentenceSpanAt(joined.text, joined.text.indexOf("topnotch"))
+        assertEquals("Her English is topnotch.", joined.text.substring(sentence.start, sentence.end))
+    }
+
+    @Test
+    fun translationPromptCarriesContextAndAnswerIsCleaned() {
+        val prompt = AiClient.translatePrompt("packed", "We packed our luggage the night before.")
+        assertTrue(prompt.contains("into natural, fluent Ukrainian"))
+        assertTrue(prompt.contains("We packed our luggage the night before."))
+        assertTrue(AiClient.translatePrompt("яблуко", "").contains("into natural English"))
+        assertEquals("спакували", AiClient.cleanTranslation(" «спакували»\n"))
+        assertEquals("apple", AiClient.cleanTranslation("\"apple\"\n\nNote: fruit"))
     }
 
     @Test

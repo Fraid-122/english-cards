@@ -32,7 +32,8 @@ data class PickedWord(val word: String, val sentence: String)
 
 /** What the word dialog needs from the app. */
 class WordActions(
-    val translate: suspend (String) -> String,
+    /** Translates [text]; [context] is the sentence it came from (may be empty). */
+    val translate: suspend (text: String, context: String) -> String,
     val speak: (String) -> Unit,
     val save: (word: String, translation: String, sentence: String, topic: String) -> Unit,
 )
@@ -81,7 +82,7 @@ fun WordDialog(
         delay(400)
         status = "Перекладаю…"
         try {
-            translation = actions.translate(source)
+            translation = actions.translate(source, if (picked.sentence == source) "" else picked.sentence)
             status = null
         } catch (e: CancellationException) {
             throw e
