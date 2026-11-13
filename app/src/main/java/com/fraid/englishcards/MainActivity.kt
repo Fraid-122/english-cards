@@ -226,8 +226,12 @@ private fun App(vm: AppViewModel) {
                     if (video != null) {
                         VideoScreen(
                             video = video,
+                            busy = vm.videoBusy,
+                            aiEnabled = vm.aiEnabled,
                             actions = wordActions,
                             onSaveText = { text -> vm.saveVideoText(video.id, text) },
+                            onReloadSubtitles = { vm.reloadSubtitles(video.id) },
+                            onTranscribe = { vm.transcribeVideo(video.id) },
                             onBack = { vm.back() },
                         )
                     }

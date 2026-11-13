@@ -93,6 +93,58 @@ object AiClient {
             ?: throw AiException("ШІ не повернув відповідь. Спробуй ще раз.")
     }
 
+    /**
+     * Asks the AI to listen to a YouTube video and write down what is said, with times.
+     * Used when the video has no subtitles. Works best for videos up to about 15 minutes.
+     */
+    suspend fun transcribe(apiKey: String, model: String, videoId: String): List<VideoLine> =
+        withContext(Dispatchers.IO) {
+            val body = buildJsonObject {
+                putJsonArray("contents") {
+                    addJsonObject {
+                        putJsonArray("parts") {
+                            addJsonObject {
+                                putJsonObject("fileData") {
+                                    put("fileUri", "https://www.youtube.com/watch?v=$videoId")
+                                }
+                            }
+                            addJsonObject { put("text", TRANSCRIBE_PROMPT) }
+                        }
+                    }
+                }
+                putJsonObject("generationConfig") {
+                    put("temperature", 0)
+                    put("responseMimeType", "application/json")
+                }
+            }.toString()
+            val text = extractText(post(apiKey, model, body, readTimeoutMillis = 240_000))
+            val lines = if (text == null) emptyList() else parseTranscript(text)
+            if (lines.isEmpty()) throw AiException("ШІ не зміг розшифрувати це відео.")
+            lines
+        }
+
+    private const val TRANSCRIBE_PROMPT =
+        "Transcribe everything spoken in English in this video. Return ONLY a JSON array. " +
+            "Each item is an object with \"t\" (the start time in seconds, a number) and " +
+            "\"text\" (one sentence or short phrase exactly as spoken). Keep the items in order."
+
+    /** Reads the transcript the model wrote: [{"t": 1.5, "text": "..."}, ...]. */
+    fun parseTranscript(text: String): List<VideoLine> {
+        val start = text.indexOf('[')
+        val end = text.lastIndexOf(']')
+        if (start < 0 || end <= start) return emptyList()
+        return try {
+            json.parseToJsonElement(text.substring(start, end + 1)).jsonArray.mapNotNull { item ->
+                val obj = item.jsonObject
+                val seconds = obj["t"]?.jsonPrimitive?.contentOrNull?.toDoubleOrNull() ?: return@mapNotNull null
+                val line = obj["text"]?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
+                if (line.isEmpty()) null else VideoLine((seconds * 1000).toLong(), line)
+            }
+        } catch (e: IllegalArgumentException) {
+            emptyList()
+        }
+    }
+
     fun chatInstruction(words: List<String>): String {
         val list = words.filter { it.isNotBlank() }.distinct().take(25).joinToString(", ")
         return """
@@ -104,7 +156,7 @@ object AiClient {
     }
 
     /** Sends the request and returns the raw response; throws [AiException] with a readable message. */
-    private fun post(apiKey: String, model: String, body: String): String {
+    private fun post(apiKey: String, model: String, body: String, readTimeoutMillis: Int = 30_000): String {
         if (apiKey.isBlank()) throw AiException("Додай API-ключ у налаштуваннях ШІ.")
         val modelId = model.trim().ifBlank { DEFAULT_MODEL }
         val url = URL("https://generativelanguage.googleapis.com/v1beta/models/$modelId:generateContent")
@@ -112,7 +164,7 @@ object AiClient {
         try {
             connection.requestMethod = "POST"
             connection.connectTimeout = 15_000
-            connection.readTimeout = 30_000
+            connection.readTimeout = readTimeoutMillis
             connection.doOutput = true
             connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
             connection.setRequestProperty("x-goog-api-key", apiKey.trim())

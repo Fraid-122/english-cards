@@ -301,6 +301,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 videoId = videoId,
                 title = loaded?.title?.takeIf { it.isNotBlank() } ?: "Відео $videoId",
                 lines = loaded?.lines.orEmpty(),
+                note = loaded?.note ?: "не вдалося звернутися до YouTube",
                 createdAt = System.currentTimeMillis(),
             )
             withContext(Dispatchers.IO) { videoStore.save(video) }
@@ -309,6 +310,41 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 if (video.lines.isEmpty()) "Відео додано, але субтитри завантажити не вдалося."
                 else "Відео додано із субтитрами."
             )
+        }
+    }
+
+    /** Tries once more to load the video's own subtitles from YouTube. */
+    fun reloadSubtitles(id: String) {
+        val video = videos.value.firstOrNull { it.id == id } ?: return
+        videoBusy = true
+        viewModelScope.launch {
+            val loaded = runCatching { YouTubeCaptions.load(video.videoId) }.getOrNull()
+            val updated = video.copy(
+                lines = loaded?.lines.orEmpty(),
+                note = loaded?.note ?: "не вдалося звернутися до YouTube",
+            )
+            withContext(Dispatchers.IO) { videoStore.save(updated) }
+            videoBusy = false
+            toast(if (updated.lines.isEmpty()) "Субтитри не завантажились: ${updated.note}." else "Субтитри завантажено.")
+        }
+    }
+
+    /** Makes subtitles with the AI: it listens to the video and writes down the speech. */
+    fun transcribeVideo(id: String) {
+        val video = videos.value.firstOrNull { it.id == id } ?: return
+        videoBusy = true
+        viewModelScope.launch {
+            try {
+                val lines = AiClient.transcribe(apiKey, aiModel, video.videoId)
+                withContext(Dispatchers.IO) { videoStore.save(video.copy(lines = lines, note = "")) }
+                toast("Субтитри створено.")
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                toast(e.message ?: "Не вдалося створити субтитри.")
+            } finally {
+                videoBusy = false
+            }
         }
     }
 

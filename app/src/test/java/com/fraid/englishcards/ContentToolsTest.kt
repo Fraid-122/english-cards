@@ -147,6 +147,34 @@ class ContentToolsTest {
     }
 
     @Test
+    fun readsXmlSubtitlesAndPlayerAnswer() {
+        val classic = """<transcript><text start="1.5" dur="2">Hello &amp;amp; welcome</text><text start="4" dur="1">It&amp;#39;s <i>fine</i></text></transcript>"""
+        val lines = YouTubeCaptions.parseXml(classic)
+        assertEquals(2, lines.size)
+        assertEquals(1500L, lines[0].startMs)
+        assertEquals("Hello & welcome", lines[0].text)
+        assertEquals("It's fine", lines[1].text)
+
+        val modern = """<timedtext><body><p t="2000" d="900">First line</p><p t="3000" d="500"></p></body></timedtext>"""
+        val modernLines = YouTubeCaptions.parseXml(modern)
+        assertEquals(1, modernLines.size)
+        assertEquals(2000L, modernLines[0].startMs)
+
+        val answer = """{"captions":{"playerCaptionsTracklistRenderer":{"captionTracks":[{"baseUrl":"https://www.youtube.com/api/timedtext?v=1&lang=en","languageCode":"en","kind":"asr"}]}}}"""
+        assertEquals("https://www.youtube.com/api/timedtext?v=1&lang=en", YouTubeCaptions.playerResponseTrackUrl(answer))
+        assertNull(YouTubeCaptions.playerResponseTrackUrl("""{"playabilityStatus":{"status":"ERROR"}}"""))
+    }
+
+    @Test
+    fun readsAiTranscript() {
+        val lines = AiClient.parseTranscript("""[{"t": 0.5, "text": "Hi there."}, {"t": 3, "text": " Second one "}, {"t": 5, "text": ""}]""")
+        assertEquals(2, lines.size)
+        assertEquals(500L, lines[0].startMs)
+        assertEquals("Second one", lines[1].text)
+        assertTrue(AiClient.parseTranscript("no transcript").isEmpty())
+    }
+
+    @Test
     fun readsChatReply() {
         val response = """{"candidates":[{"content":{"parts":[{"text":"Hi! How are you?"}]}}]}"""
         assertEquals("Hi! How are you?", AiClient.extractText(response))

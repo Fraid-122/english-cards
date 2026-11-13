@@ -26,6 +26,8 @@ data class Video(
     val lines: List<VideoLine> = emptyList(),
     val text: String = "",
     val createdAt: Long = 0L,
+    /** Why there are no subtitles, to show to the user. */
+    val note: String = "",
 )
 
 /** A ready-made set of cards that can be added to the user's cards. */
